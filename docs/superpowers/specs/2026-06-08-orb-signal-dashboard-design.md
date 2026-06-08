@@ -78,9 +78,18 @@ After each range locks and passes quality:
   - Price is **below VWAP**
   - Breakout candle volume above average
 
-**One trade per day (global).** ONE trade across all tickers AND all timeframes. Once a signal fires, the engine tracks that position and stops looking. If it loses, day is done.
+**Smart trade selection — quality over quantity.**
 
-**Composite ranking (when multiple signals qualify):**
+The default is ONE trade per day. But if multiple tickers produce genuinely strong setups, take them both rather than leaving money on the table. The rules:
+
+1. **Always take the #1 ranked signal.** This is the primary trade.
+2. **Take a second trade ONLY IF** the #2 signal is also Grade A, its composite score is within 2 points of #1, and it's on a different ticker (never two trades on the same asset).
+3. **Never more than 2 trades per day.** Even if all three tickers look great, cap at 2.
+4. **Never force a trade.** If no signal passes all filters, post "No trade today" and move on. Sitting out is always an option.
+
+Example: BTC and ETH both fire Grade A breakouts within 2 minutes, both scoring 8+ out of 10. Take both. But if BTC scores 9 and SOL scores 5, just take BTC.
+
+**Composite ranking:**
 
 1. **Grade weight** — A = 3 pts, B = 2 pts, C = 1 pt
 2. **Gap alignment** — signal matches gap direction = +2 pts; against = -1 pt
@@ -89,7 +98,7 @@ After each range locks and passes quality:
 5. **Breakout volume** — higher relative volume = more conviction, +0 to 2 pts
 6. **Candle quality** — close position within range, closer to extreme = +0 to 1 pt
 
-The highest-scoring signal wins regardless of which timeframe or ticker produced it. The engine waits 2 minutes after the first valid breakout to see if a better one fires, then commits.
+Max composite score: ~12 pts. The engine waits 2 minutes after the first valid breakout to see if others fire, then commits to the best (and optionally second-best).
 
 **Time cutoff: 11:30 AM ET.** No new signals after this.
 
@@ -161,9 +170,9 @@ Volume: 142% of avg
 Watching for breakout...
 ```
 
-**Today's trade:**
+**Primary trade:**
 ```
-ORB LONG — BTC 10-min  [A]  BEST SETUP
+ORB LONG — BTC 10-min  [A]  #1 SETUP
 Entry:   $64,300
 Stop:    $63,850 (range low)
 Target:  $64,730 (measured move, 1R)
@@ -173,10 +182,28 @@ Above VWAP ($64,100)
 Trend: above 20-SMA, slope +2.1%
 Gap: +1.2% (with gap)
 Breakout vol: 185% of avg
-Ranked #1 of 4 valid setups
+Score: 9.2 / 12 — Ranked #1
 ---
 Timeframe: 10-min (scored highest across 5/10/15)
-This is today's ONE trade.
+Trade 1 of 1 today.
+```
+
+**Second trade (only when both are strong):**
+```
+ORB LONG — ETH 10-min  [A]  #2 SETUP (also strong)
+Entry:   $2,485
+Stop:    $2,462 (range low)
+Target:  $2,508 (measured move, 1R)
+Risk:    $23
+---
+Above VWAP ($2,478)
+Trend: above 20-SMA, slope +1.8%
+Gap: +0.8% (with gap)
+Breakout vol: 162% of avg
+Score: 8.5 / 12 — within 2 pts of #1
+---
+Both BTC and ETH showing Grade A setups. Taking both.
+Trade 2 of 2 today.
 ```
 
 **Target hit:**
@@ -199,17 +226,16 @@ No trade today.
 BTC: range too wide (82% of ATR)
 ETH: below VWAP at breakout
 SOL: SMA flat, skipped (stagnant)
+No setup worth the risk. Sitting out.
 ```
 
 **Daily summary (4:00 PM):**
 ```
 ORB Daily Summary — Jun 9
-Trade: BTC LONG 10-min [A] -> WIN
-Entry $64,300 -> Exit $65,100
-Result: +$800 (1.8R)
+Trade 1: BTC LONG 10-min [A] -> WIN +$800 (1.8R)
+Trade 2: ETH LONG 10-min [A] -> WIN +$28 (1.2R)
 ---
-Also qualified: ETH 15-min (ranked #2)
-Skipped: SOL (SMA flat)
+Skipped: SOL (SMA flat — stagnant)
 ---
 Running: 68% win rate (17W-8L)
 Grade A signals: 75% win rate
