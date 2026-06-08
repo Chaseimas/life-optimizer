@@ -84,7 +84,7 @@ The default is ONE trade per day. But if multiple tickers produce genuinely stro
 
 1. **Always take the #1 ranked signal.** This is the primary trade.
 2. **Take a second trade ONLY IF** the #2 signal is also Grade A, its composite score is within 2 points of #1, and it's on a different ticker (never two trades on the same asset).
-3. **Never more than 2 trades per day.** Even if all three tickers look great, cap at 2.
+3. **Up to 3 trades per day.** If all three tickers produce Grade A setups with scores within 2 points of each other, take all three. This is rare but when it happens, the trend is strong across the board.
 4. **Never force a trade.** If no signal passes all filters, post "No trade today" and move on. Sitting out is always an option.
 
 Example: BTC and ETH both fire Grade A breakouts within 2 minutes, both scoring 8+ out of 10. Take both. But if BTC scores 9 and SOL scores 5, just take BTC.
