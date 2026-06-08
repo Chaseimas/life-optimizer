@@ -63,9 +63,27 @@ For each ticker, during the first N minutes after 9:30 AM:
 - When the configured candle period ends (e.g., 9:35 AM for 5-min), freeze the range
 - Store: `ticker`, `date`, `range_high`, `range_low`, `range_width`, `candle_size`, `open_price`
 
+### Signal Quality Filter
+
+Not every opening range produces a good trade. Before alerting, the engine checks:
+
+- **Max risk per share:** Skip if range width exceeds a configurable cap (e.g., $2.00). A $3 wide range on SPY means risking $3/share to make $3 at 1:1 — not worth it for most setups.
+- **Min range width:** Skip if range is too narrow (e.g., < $0.15). Extremely tight ranges whipsaw and produce false breakouts.
+- **Max range as % of price:** Skip if range width is more than a configurable percentage of the stock price (e.g., 0.5%). Normalizes risk across different-priced tickers — $1 risk on a $50 stock is very different from $1 on a $500 stock.
+- **Volume check:** Skip if the opening range candle's volume is abnormally low (below 50% of the ticker's average first-candle volume). Low volume ranges are unreliable.
+
+When a signal is skipped, the engine still logs it to the database (with a `skipped` flag and the reason) and posts a muted Discord message so you can review whether the filters are too aggressive:
+
+```
+⏭️ SPY — LONG breakout skipped
+Reason: Range too wide ($2.85 risk, max $2.00)
+```
+
+All filter thresholds are configurable in Settings.
+
 ### Breakout Detection
 
-After the range is locked:
+After the range is locked and passes the quality filter:
 
 - Monitor each 1-minute candle close
 - **Long breakout:** 1-min candle closes above `range_high`
@@ -165,6 +183,11 @@ Top bar shows: market status (pre-market / open / closed), number of tickers wat
 - **Candle size:** 5 / 15 / 30 minutes (radio buttons)
 - **Risk/Reward target:** 1:1, 1.5:1, 2:1 (radio buttons)
 - **Breakout confirmation:** "Candle close above range" (default, fewer false signals) vs "Any tick above range" (faster, more signals)
+- **Signal filters:**
+  - Max risk per share ($) — default $2.00
+  - Min range width ($) — default $0.15
+  - Max range as % of price — default 0.5%
+  - Min volume ratio vs average — default 50%
 - **Discord webhook URL:** text input with test button
 - **Engine control:** start/stop toggle, status indicator
 
@@ -193,6 +216,8 @@ Top bar shows: market status (pre-market / open / closed), number of tickers wat
 | outcome_price | REAL | Price at outcome |
 | max_favorable | REAL | Best price in signal direction |
 | max_adverse | REAL | Worst price against signal |
+| skipped | INTEGER | 1 if signal was filtered out, 0 otherwise |
+| skip_reason | TEXT | Why signal was skipped (NULL if not skipped) |
 
 **opening_ranges**
 | Column | Type | Description |
@@ -213,7 +238,7 @@ Top bar shows: market status (pre-market / open / closed), number of tickers wat
 | key | TEXT PK | Setting name |
 | value | TEXT | JSON-encoded value |
 
-Settings keys: `watchlist`, `candle_size`, `risk_reward`, `breakout_mode`, `discord_webhook_url`.
+Settings keys: `watchlist`, `candle_size`, `risk_reward`, `breakout_mode`, `discord_webhook_url`, `max_risk_per_share`, `min_range_width`, `max_range_pct`, `min_volume_ratio`.
 
 ## Stack
 
