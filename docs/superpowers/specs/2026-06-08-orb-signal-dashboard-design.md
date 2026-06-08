@@ -64,27 +64,44 @@ After the range is locked and passes the quality gate:
   - Price is **below VWAP**
   - Breakout candle volume is above average
 
-**One-and-done rule:** Only the FIRST breakout per direction per ticker per day is signaled. If the first long breakout fails and price re-enters the range, do NOT signal a second long attempt. The first failure is information — the setup didn't work.
+**One trade per day (global).** The engine takes exactly ONE trade across all tickers, all directions. Once a signal fires, the engine stops looking for new breakouts and focuses entirely on tracking that one position. If it loses, the day is done — no revenge trading, no "let me try another ticker." Discipline is the edge.
 
-**Time cutoff: 11:30 AM ET.** No new breakout signals after this. Late breakouts are thin-market traps. The engine continues monitoring existing open signals for outcome tracking, but no new entries.
+**How the engine picks the best trade:**
+
+When multiple tickers pass all filters and break out around the same time, the engine ranks them by a composite score:
+
+1. **Grade weight** — A = 3 pts, B = 2 pts, C = 1 pt
+2. **Gap alignment** — signal direction matches gap = +2 pts; against gap = -1 pt
+3. **VWAP distance** — further above VWAP for longs (below for shorts) = stronger conviction, +0 to 2 pts scaled
+4. **Breakout volume** — higher relative volume on the breakout candle = more conviction, +0 to 2 pts scaled
+5. **Breakout candle quality** — close position within the candle range, closer to the extreme = stronger, +0 to 1 pt scaled
+
+The highest-scoring setup wins. If two tickers break out minutes apart, the engine waits up to 2 minutes after the first valid breakout to see if a better one fires on another ticker. After 2 minutes (or if only one ticker qualifies), it commits to the best one and sends the alert.
+
+If nothing qualifies all day, the engine posts "No trade today" at 11:30 AM. That's a valid outcome — the best trade is sometimes no trade.
+
+**Time cutoff: 11:30 AM ET.** No new signals after this. Late breakouts are thin-market traps. The engine continues monitoring the active position (if any) for outcome tracking, but won't open new ones.
 
 ### Phase 5: Exit Levels & Outcome Tracking
 
-Each signal fires with three exit levels, matching how real traders manage ORB positions:
+One trade, one position — exit strategy is clean and simple:
 
-**Stop loss:** The opposite end of the opening range (full range stop). Alternatively, mid-range for a tighter stop — configurable in settings.
+**Stop loss:** The opposite end of the opening range. For a long, stop = range low. For a short, stop = range high. This is the max risk on the trade. Configurable to use mid-range for a tighter stop (higher R potential but more frequent stops).
 
-**Target 1 (partial profit):** The **measured move** — range height projected from the breakout point. For a long: `entry_price + range_width`. This is where traders take partial profit (close half the position).
+**Target (measured move):** The range height projected from the breakout point. For a long: `entry_price + range_width`. For a short: `entry_price - range_width`. This is the primary profit target — a 1:1 R trade.
 
-**Target 2 (runner):** Next key level — prior day high/low, overnight high/low, or 2× the range width, whichever comes first. This is where the trailing stop kicks in.
+**Trailing stop (after target hit):** Once the target is reached, the alert notifies you. If you're still in, the suggested stop moves to breakeven (entry price). From there, it trails below the 9-period EMA on the 5-minute chart for longs (above for shorts), letting you ride trend days for bonus profit beyond the initial target.
 
-**Trailing stop (after Target 1 hit):** Once Target 1 is reached, the stop moves to breakeven (entry price). From there, it trails below the 9-period EMA on the 5-minute chart for longs (above for shorts), locking in profits while staying in for trend days.
+**Failure exit:** If a 1-minute candle **closes back inside the opening range** after entry, the breakout has failed. Get out — don't wait for the full stop. This saves you from giving back the full range width on a clear rejection.
 
-**Failure exit:** If a 1-minute candle **closes back inside the opening range** after entry, the breakout has failed. This is logged as an early exit, separate from a stop-loss hit.
+**Time exit:** If neither target nor stop is hit within 2 hours of entry, the trade is going nowhere. Log it as a scratch and move on.
 
-**Time exit:** If neither target nor stop is hit within 2 hours of entry, log it as a time exit. ORB trades that work tend to show their strength early.
+**End of day (4:00 PM):** If still open (rare with the above rules), close at market price.
 
-**End of day (4:00 PM):** Any remaining open signals are closed at the market close price. Outcome is evaluated based on what happened: WIN (hit Target 1+), LOSS (hit stop), SCRATCH (time exit or close inside range with minimal P/L).
+**Outcome categories:**
+- **WIN** — hit target or trailed out above entry
+- **LOSS** — hit stop or failure exit below entry
+- **SCRATCH** — time exit or EOD close near entry (< 0.2R either direction)
 
 ### Phase 6: Gap Context in Alerts
 
@@ -149,55 +166,63 @@ Prior day H/L: $544.50 / $540.20
 Watching for breakout until 11:30 AM...
 ```
 
-**Breakout signal:**
+**Today's trade (breakout signal):**
 ```
-🟢 ORB LONG — SPY  [A]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Entry:    $543.12
-Stop:     $542.30 (range low)
-Target 1: $543.92 (measured move, take half)
-Target 2: $544.50 (prior day high)
-Risk:     $0.82/share
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟢 ORB LONG — SPY  [A]  ⭐ BEST SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Entry:   $543.12
+Stop:    $542.30 (range low)
+Target:  $543.92 (measured move, 1R)
+Risk:    $0.82/share
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ Above VWAP ($542.85)
 ✅ Trend: above 20-SMA
 ✅ Gap: +0.3% (with gap — high probability)
 ✅ Breakout vol: 185% of avg
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Ranked #1 of 2 valid setups
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This is today's ONE trade. Day is done after this.
 Time: 9:47 AM ET
 ```
 
-**Signal update (Target 1 hit):**
+**Target hit:**
 ```
-🎯 SPY LONG — Target 1 hit at $543.92
-Half off, stop moved to breakeven ($543.12)
-Trailing remainder below 9-EMA. Runner target: $544.50
-```
-
-**Signal exit:**
-```
-🏁 SPY LONG — Exited at $544.35 (trailing stop)
-Result: +$1.23/share (1.5R)
-T1 ✅ hit | T2 ❌ missed by $0.15
+🎯 SPY LONG — Target hit at $543.92 (+$0.80, 1R)
+Stop moved to breakeven ($543.12).
+Trail below 9-EMA if you're riding the runner.
 ```
 
-**Skipped signal:**
+**Trade closed:**
 ```
-⏭️ QQQ — LONG breakout skipped
-Below VWAP + against gap direction — low probability
+🏁 SPY LONG — Done.
+Exit: $544.35 (trailed out above target)
+Result: +$1.23/share (1.5R) ✅ WIN
+Day is complete.
+```
+
+**No trade today (11:30 AM):**
+```
+🚫 No trade today.
+No setup passed all filters. Sitting out is the right call.
+SPY: range too wide (82% of ATR)
+QQQ: below VWAP at breakout
+AAPL: no breakout before cutoff
 ```
 
 **Daily summary (4:00 PM):**
 ```
 📋 ORB Daily Summary — Jun 9
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SPY:  🟢 LONG [A] → ✅ +$1.23 (1.5R) — trailed out
-QQQ:  ⏭️ Skipped (below VWAP)
-AAPL: 🔴 SHORT [B] → ❌ -$0.45 (failed re-entry)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Today: 1W / 1L / 1 skip
-Net: +$0.78/share | Running: 58% win rate (23W-17L)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Trade: SPY 🟢 LONG [A] → ✅ WIN
+Entry $543.12 → Exit $544.35
+Result: +$1.23/share (1.5R)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Also qualified: QQQ (not taken, ranked #2)
+Skipped: AAPL (below VWAP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Running: 58% win rate (23W-17L)
 Grade A signals: 68% win rate
+Streak: 3W
 ```
 
 ## Web Dashboard Detail
@@ -209,15 +234,15 @@ Per-ticker cards showing:
 - **Key levels:** prior day H/L, overnight H/L, VWAP — all drawn on the range bar
 - **Status badge:** "Pre-market" → "Building range…" → "Watching…" → "LONG [A] ✅" / "SHORT [B] 🔴" / "Skipped" / "No breakout" / "Past cutoff"
 - **Filters summary:** trend (✅/⚠️), VWAP position, gap direction, volume status
-- **Signal details** (if triggered): entry, stop, T1, T2, current P/L, trailing stop level
+- **Signal details** (if triggered): entry, stop, target, current P/L, trailing stop level
 - **Time info:** time since open, time since signal, time until cutoff
 
-Top bar shows: market status (pre-market / open / past cutoff / closed), tickers watched, today's signal count, today's skip count.
+Top bar shows: market status (pre-market / open / past cutoff / closed), tickers watched, today's trade status ("Waiting for setup" / "SPY LONG active" / "Done — WIN +$1.23" / "No trade today").
 
 ### History Page
 
 - **Summary stats at top:** total signals, win rate, average R, best streak, worst streak, profit factor, win rate by grade (A/B/C)
-- **Filterable table:** date, ticker, direction, grade, entry, stop, T1, T2, outcome, R multiple, exit type (target/stop/trail/failure/time), duration, gap context
+- **Filterable table:** date, ticker, direction, grade, entry, stop, target, outcome, R multiple, exit type, duration, gap context, ranking score
 - **Filters:** ticker, direction, outcome, grade, exit type, date range
 - **Per-ticker breakdown:** which tickers have the best ORB win rate
 - **Grade analysis:** win rate and average R broken down by A/B/C grade — validates whether the grading system works
@@ -241,11 +266,14 @@ Top bar shows: market status (pre-market / open / past cutoff / closed), tickers
 - Time cutoff: default 11:30 AM ET
 
 **Exits:**
-- Target 1 method: measured move (default) or fixed R (1R, 1.5R, 2R)
-- Target 2 method: prior day level (default) or fixed R multiple
-- Trailing stop method: 9-EMA (default) or VWAP
+- Target: measured move / 1R (default — clean 1:1 risk/reward)
+- Trailing stop after target: 9-EMA (default) or VWAP
 - Failure exit (close back inside range): ON/OFF (default ON)
 - Time exit (2 hours): ON/OFF (default ON)
+
+**Discipline:**
+- Trades per day: 1 (hardcoded — this is the core philosophy)
+- Selection delay: 2 minutes (wait after first valid breakout to see if a better ticker qualifies)
 
 **Alerts:**
 - Discord webhook URL with test button
@@ -273,19 +301,20 @@ Top bar shows: market status (pre-market / open / past cutoff / closed), tickers
 | range_width | REAL | High minus low |
 | entry_price | REAL | Breakout candle close |
 | stop_price | REAL | Stop loss price |
-| target1_price | REAL | Measured move target |
-| target2_price | REAL | Runner target (prior day level or 2R) |
+| target_price | REAL | Measured move target (1R) |
 | risk_per_share | REAL | Range width (or half if mid-range stop) |
 | signal_time | TEXT | ISO timestamp |
 | vwap_at_entry | REAL | VWAP at time of breakout |
 | breakout_candle_vol | INTEGER | Volume of the breakout candle |
 | breakout_candle_quality | REAL | Where close falls in candle range (0.0–1.0) |
 | outcome | TEXT | "WIN", "LOSS", "SCRATCH", or NULL |
-| exit_type | TEXT | "target1", "target2", "stop", "trail", "failure", "time", "eod" |
+| exit_type | TEXT | "target", "stop", "trail", "failure", "time", "eod" |
 | exit_price | REAL | Price at exit |
 | exit_time | TEXT | When position was exited |
 | r_multiple | REAL | Actual R achieved (profit / risk) |
-| target1_hit | INTEGER | 1 if T1 was reached, 0 if not |
+| target_hit | INTEGER | 1 if target was reached, 0 if not |
+| ranking_score | REAL | Composite score used to pick this as today's trade |
+| was_selected | INTEGER | 1 if this was today's chosen trade, 0 if it qualified but wasn't picked |
 | max_favorable | REAL | Best price in signal direction |
 | max_adverse | REAL | Worst price against signal |
 | skipped | INTEGER | 1 if filtered out, 0 otherwise |
@@ -328,7 +357,7 @@ Top bar shows: market status (pre-market / open / past cutoff / closed), tickers
 | key | TEXT PK | Setting name |
 | value | TEXT | JSON-encoded value |
 
-Settings keys: `watchlist`, `candle_size`, `stop_placement`, `trend_filter`, `vwap_filter`, `candle_quality_filter`, `breakout_volume_filter`, `max_range_atr_pct`, `max_range_price_pct`, `min_range_price_pct`, `min_volume_ratio`, `time_cutoff`, `target1_method`, `target2_method`, `trailing_stop_method`, `failure_exit`, `time_exit`, `discord_webhook_url`, `alert_skipped`, `alert_updates`.
+Settings keys: `watchlist`, `candle_size`, `stop_placement`, `trend_filter`, `vwap_filter`, `candle_quality_filter`, `breakout_volume_filter`, `max_range_atr_pct`, `max_range_price_pct`, `min_range_price_pct`, `min_volume_ratio`, `time_cutoff`, `selection_delay_sec`, `trailing_stop_method`, `failure_exit`, `time_exit`, `discord_webhook_url`, `alert_skipped`, `alert_updates`.
 
 ## Stack
 
@@ -354,7 +383,8 @@ For simplest setup: run both services on the same machine (Railway or VPS) so th
 - Opening range construction (5/15/30 min configurable, default 15)
 - Full signal quality gate (trend, VWAP, ATR, volume, range %)
 - Breakout detection with candle close quality + VWAP + volume confirmation
-- Multi-target exit system (T1 measured move, T2 key level, trailing stop, failure exit, time exit)
+- One-trade-per-day discipline with composite ranking to pick the single best setup
+- Clean exit system (target, stop, trailing stop, failure exit, time exit)
 - One-and-done rule, 11:30 AM time cutoff
 - Quality grading (A/B/C) with grade-based performance tracking
 - Gap context in alerts and outcome analysis
