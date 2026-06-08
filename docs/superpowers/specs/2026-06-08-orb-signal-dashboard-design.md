@@ -1,402 +1,376 @@
-# ORB Signal Dashboard — Design Spec
+# ORB Crypto Signal Dashboard — Design Spec
 
-An automated Opening Range Breakout signal tool that monitors US stocks at market open, detects breakouts with professional-grade filters, and alerts via Discord.
+An automated Opening Range Breakout signal tool for cryptocurrency that scans multiple timeframes, detects the highest-quality breakout each day, and alerts via Discord.
 
 ## Overview
 
-**What:** A background signal engine + web dashboard that implements the ORB (Opening Range Breakout) day trading strategy the way real day traders use it — with VWAP alignment, trend filters, candle quality checks, partial profit targets, and trailing stops. It connects to Alpaca's real-time data at market open, builds the opening range, monitors for high-quality breakouts, sends Discord alerts, and tracks outcomes over time.
+**What:** A background signal engine + web dashboard that runs the ORB strategy on crypto (BTC, ETH, SOL) using professional-grade filters. It scans all three timeframes (5, 10, 15-min) simultaneously and picks the single best trade each day. Sends Discord alerts so the user gets notified at work without watching screens.
 
-**Who:** Built for personal use. User is away from screens at market open — the tool must be fully autonomous during market hours.
+**Who:** Built for personal use. User is away from screens during the session — fully autonomous.
 
-**What it does NOT do:** Execute trades. It identifies signals and alerts the user, who decides whether to act.
+**What it does NOT do:** Execute trades. It identifies signals and alerts the user.
 
-## The ORB Strategy (Full Rules)
+**Why crypto:** Backtested across US stocks (SPY, QQQ, AAPL, TSLA, NVDA, AMD, IWM), futures (ES, NQ, YM, CL), and crypto (BTC, ETH, SOL) in growth, stagnant, and decline market phases. Crypto dominated every trending condition — 78% win rate in growth (10-min), 83% in decline (15-min). Stocks peaked at 67% in growth only. Futures never exceeded 44%.
 
-### Phase 1: Pre-Market Context (9:00–9:30 AM ET)
+## The ORB Strategy
 
-Before the opening range even forms, the engine gathers context:
+### Phase 1: Pre-Session Context (9:00–9:30 AM ET)
 
-- **Prior day levels:** Yesterday's high, low, and close. These are key support/resistance zones that often act as magnets or barriers for breakouts.
-- **Overnight high/low:** The high and low from the after-hours and pre-market session (4:00 PM prior day → 9:30 AM today). Breakouts that align with overnight direction are stronger.
-- **Pre-market gap:** The difference between today's pre-market price and yesterday's close. Gap direction significantly affects ORB — long breakouts on gap-up days hit targets ~74% of the time vs ~48% on gap-down days.
-- **Daily trend (20-day SMA):** Is the stock above or below its 20-day simple moving average? This is the higher-timeframe trend filter. Only take longs if price is above the 20-day SMA; only take shorts if below. This single filter significantly reduces counter-trend failures.
-- **14-day ATR:** Average True Range over the last 14 trading days. Used to judge whether the opening range is normal-sized or abnormally wide/tight for this ticker.
+The engine uses the US market open (9:30 AM ET) as the crypto session anchor — this is when institutional volume spikes and clean breakout structures form.
 
-### Phase 2: Opening Range Construction (9:30 AM → candle close)
+Before the opening range forms, the engine gathers:
 
-- Market opens at 9:30 AM ET
-- Track the highest high and lowest low during the first candle (configurable: 5, 15, or 30 minutes; default 15 min — the most common timeframe among real ORB traders, balancing speed vs false breakout rate)
-- When the candle closes, the range is locked: `range_high` and `range_low`
-- Also record: opening range volume, VWAP at range close, open price
+- **Prior day levels:** Yesterday's high, low, and close (using 00:00–23:59 UTC daily candle). Key support/resistance zones.
+- **Pre-market price:** Price just before 9:30 AM ET. Used to calculate the gap.
+- **Gap:** Difference between pre-session price and prior daily close. Long breakouts on gap-up days hit targets ~74% vs ~48% on gap-down days.
+- **20-day SMA:** Higher-timeframe trend filter. Only take longs above it, shorts below it.
+- **SMA slope:** Rate of change of the 20-SMA over the last 5 days. If the SMA is flat (slope near zero), the market is stagnant — reduce signal confidence or skip entirely. Steep slopes = trending = where ORB excels.
+- **14-day ATR:** Judges whether the opening range is normal-sized for this asset.
+
+### Phase 2: Multi-Timeframe Range Construction (9:30 AM ET →)
+
+This is the key differentiator. Instead of committing to one timeframe, the engine builds **three opening ranges simultaneously:**
+
+| Timeframe | Range locks at | Best in |
+|-----------|---------------|---------|
+| 5-min | 9:35 AM | Fast-moving trending markets |
+| 10-min | 9:40 AM | Growth phases (78% WR in backtest) |
+| 15-min | 9:45 AM | Decline phases (83% WR in backtest) |
+
+For each ticker × timeframe combination, record:
+- `range_high`, `range_low`, `range_width`
+- Opening range volume, VWAP at range close, open price
+
+That's 9 ranges total (3 tickers × 3 timeframes), all monitored in parallel.
 
 ### Phase 3: Signal Quality Gate
 
-Not every opening range produces a tradeable setup. The engine runs these checks before monitoring for breakouts. If any check fails, that ticker is marked "no trade today" with the reason logged.
+Each of the 9 ticker/timeframe combos is independently filtered. If any check fails, that combo is marked "no trade" with the reason logged.
 
 **Filters (all must pass):**
 
-1. **Trend alignment (20-day SMA):** Long signals require price above the 20-day SMA. Short signals require price below it. Counter-trend breakouts fail far more often than they succeed.
+1. **Trend alignment (20-day SMA):** Longs require price above 20-SMA. Shorts require below. The single most important filter — counter-trend breakouts fail far more often.
 
-2. **Range vs ATR:** Compare range width to 14-day ATR. Skip if range > 75% of ATR — the daily move is already mostly spent, not enough room for the breakout to run. Grade the setup:
+2. **SMA slope filter:** If the 20-SMA's 5-day rate of change is within ±0.5%, the market is stagnant. Downgrade the signal by 2 points in ranking (still tradeable but less likely to be selected). If within ±0.2%, skip entirely — no edge in choppy conditions.
+
+3. **Range vs ATR:** Skip if range > 75% of ATR (daily move already spent). Grade:
    - **A:** Range < 40% of ATR (plenty of room)
    - **B:** Range 40–60% of ATR (decent)
    - **C:** Range 60–75% of ATR (borderline)
 
-3. **Range as % of price:** Skip if range width > 0.8% of the stock price (wild, choppy open) or < 0.05% (too tight, noise-level range).
+4. **Volume check:** Skip if opening range volume is below 50% of the ticker's trailing 10-day average first-candle volume.
 
-4. **Volume check:** Skip if opening range candle volume is below 50% of the ticker's trailing 10-day average first-candle volume. Low volume ranges are unreliable.
+5. **Breakout room:** Remaining ATR (ATR minus range width) must exceed the range width. If there's less room to run than you're risking, skip.
 
-5. **Breakout room score:** Remaining ATR (ATR minus range width) must be greater than the range width. If there's less room to run than you're risking, the reward doesn't justify the stop distance.
+### Phase 4: Breakout Detection (range close → 11:30 AM ET)
 
-### Phase 4: Breakout Detection (candle close → 11:30 AM ET)
+After each range locks and passes quality:
 
-After the range is locked and passes the quality gate:
-
-- Monitor each **1-minute candle close** (not intra-candle ticks — candle close confirmation reduces false breakouts)
-- **Long breakout conditions (ALL must be true):**
+- Monitor **1-minute candle closes** against range boundaries
+- **Long breakout (ALL must be true):**
   - 1-min candle closes above `range_high`
-  - Candle close is in the **top 30%** of the candle's range (strong close, not a wick that barely poked above)
-  - Price is **above VWAP** (aligned with the day's flow of money)
-  - Breakout candle volume is above the average 1-min volume for this ticker (conviction behind the move)
-- **Short breakout conditions (ALL must be true):**
+  - Close is in the **top 30%** of the candle's range (strong close)
+  - Price is **above VWAP**
+  - Breakout candle volume above average
+- **Short breakout (ALL must be true):**
   - 1-min candle closes below `range_low`
-  - Candle close is in the **bottom 30%** of the candle's range
+  - Close is in the **bottom 30%** of the candle's range
   - Price is **below VWAP**
-  - Breakout candle volume is above average
+  - Breakout candle volume above average
 
-**One trade per day (global).** The engine takes exactly ONE trade across all tickers, all directions. Once a signal fires, the engine stops looking for new breakouts and focuses entirely on tracking that one position. If it loses, the day is done — no revenge trading, no "let me try another ticker." Discipline is the edge.
+**One trade per day (global).** ONE trade across all tickers AND all timeframes. Once a signal fires, the engine tracks that position and stops looking. If it loses, day is done.
 
-**How the engine picks the best trade:**
-
-When multiple tickers pass all filters and break out around the same time, the engine ranks them by a composite score:
+**Composite ranking (when multiple signals qualify):**
 
 1. **Grade weight** — A = 3 pts, B = 2 pts, C = 1 pt
-2. **Gap alignment** — signal direction matches gap = +2 pts; against gap = -1 pt
-3. **VWAP distance** — further above VWAP for longs (below for shorts) = stronger conviction, +0 to 2 pts scaled
-4. **Breakout volume** — higher relative volume on the breakout candle = more conviction, +0 to 2 pts scaled
-5. **Breakout candle quality** — close position within the candle range, closer to the extreme = stronger, +0 to 1 pt scaled
+2. **Gap alignment** — signal matches gap direction = +2 pts; against = -1 pt
+3. **SMA slope strength** — steeper trend in signal direction = +0 to 2 pts
+4. **VWAP distance** — further from VWAP in signal direction = stronger, +0 to 2 pts
+5. **Breakout volume** — higher relative volume = more conviction, +0 to 2 pts
+6. **Candle quality** — close position within range, closer to extreme = +0 to 1 pt
 
-The highest-scoring setup wins. If two tickers break out minutes apart, the engine waits up to 2 minutes after the first valid breakout to see if a better one fires on another ticker. After 2 minutes (or if only one ticker qualifies), it commits to the best one and sends the alert.
+The highest-scoring signal wins regardless of which timeframe or ticker produced it. The engine waits 2 minutes after the first valid breakout to see if a better one fires, then commits.
 
-If nothing qualifies all day, the engine posts "No trade today" at 11:30 AM. That's a valid outcome — the best trade is sometimes no trade.
-
-**Time cutoff: 11:30 AM ET.** No new signals after this. Late breakouts are thin-market traps. The engine continues monitoring the active position (if any) for outcome tracking, but won't open new ones.
+**Time cutoff: 11:30 AM ET.** No new signals after this.
 
 ### Phase 5: Exit Levels & Outcome Tracking
 
-One trade, one position — exit strategy is clean and simple:
+**Stop loss:** Opposite end of the opening range. Long → stop at range low. Short → stop at range high.
 
-**Stop loss:** The opposite end of the opening range. For a long, stop = range low. For a short, stop = range high. This is the max risk on the trade. Configurable to use mid-range for a tighter stop (higher R potential but more frequent stops).
+**Target (measured move):** Range width projected from entry. Long: `entry + range_width`. Short: `entry - range_width`. A 1:1 R trade.
 
-**Target (measured move):** The range height projected from the breakout point. For a long: `entry_price + range_width`. For a short: `entry_price - range_width`. This is the primary profit target — a 1:1 R trade.
+**Trailing stop (after target):** Once target is hit, stop moves to breakeven. Then trails below 9-EMA (5-min chart) for longs, above for shorts.
 
-**Trailing stop (after target hit):** Once the target is reached, the alert notifies you. If you're still in, the suggested stop moves to breakeven (entry price). From there, it trails below the 9-period EMA on the 5-minute chart for longs (above for shorts), letting you ride trend days for bonus profit beyond the initial target.
+**Failure exit:** If a 1-min candle closes back inside the opening range after entry, get out immediately.
 
-**Failure exit:** If a 1-minute candle **closes back inside the opening range** after entry, the breakout has failed. Get out — don't wait for the full stop. This saves you from giving back the full range width on a clear rejection.
+**Time exit:** If neither target nor stop hit within 2 hours, log as scratch.
 
-**Time exit:** If neither target nor stop is hit within 2 hours of entry, the trade is going nowhere. Log it as a scratch and move on.
+**End of day (4:00 PM ET):** Close any open signal.
 
-**End of day (4:00 PM):** If still open (rare with the above rules), close at market price.
+**Outcomes:** WIN (hit target or trailed out above entry), LOSS (hit stop or failure exit), SCRATCH (time exit near entry).
 
-**Outcome categories:**
-- **WIN** — hit target or trailed out above entry
-- **LOSS** — hit stop or failure exit below entry
-- **SCRATCH** — time exit or EOD close near entry (< 0.2R either direction)
+### Phase 6: Gap Context
 
-### Phase 6: Gap Context in Alerts
+Included in every alert — materially affects expected win rate:
 
-The engine includes gap context in every alert because it materially affects expected win rate:
-
-- **Gap-up + Long breakout** → highest probability setup (~74% target hit rate)
-- **Gap-down + Short breakout** → second-best (gap continuation)
-- **Gap-up + Short breakout** → counter-gap, lower probability
-- **Gap-down + Long breakout** → counter-gap, lowest probability (~48%)
-
-The alert shows gap direction and whether the signal is with or against the gap.
+- Gap-up + Long → highest probability (~74%)
+- Gap-down + Short → second-best (continuation)
+- Counter-gap setups → lower probability
 
 ## Architecture
 
-Two services:
-
 ### 1. Signal Engine (Node.js background service)
 
-The always-on process that does the real work:
-
-- **Pre-market (9:00 AM ET):** Fetches prior day levels, overnight high/low, pre-market price, 20-day SMA, and 14-day ATR for all configured tickers via Alpaca REST API. Calculates gap direction and size.
-- **Session start (9:25 AM ET):** Connects to Alpaca WebSocket for real-time bars. Posts "Session starting" to Discord with watchlist and context.
-- **Opening range phase (9:30 → candle close):** Streams real-time bars, tracks high/low of the first candle. Tracks VWAP. When the candle closes, locks in the opening range. Runs the quality gate. Posts range + quality assessment to Discord.
-- **Breakout monitoring (candle close → 11:30 AM):** Watches 1-min candle closes against range boundaries. Checks all breakout conditions (candle quality, VWAP alignment, volume). On valid breakout, fires Discord alert with full context.
-- **Position tracking (breakout → 4:00 PM):** For each active signal, monitors price against Target 1, Target 2, stop, failure condition, and trailing stop. Fires Discord updates on partial profit, trailing stop moves, and exits.
-- **End of day (4:00 PM):** Closes any remaining open signals. Calculates final outcomes. Posts daily summary to Discord.
-- **Post-market:** Disconnects WebSocket, sleeps until next trading day.
+- **Pre-session (9:00 AM ET):** Fetches prior day data, calculates SMA, ATR, SMA slope, gap for BTC, ETH, SOL via Alpaca REST API.
+- **Session start (9:25 AM):** Connects to Alpaca crypto WebSocket. Posts session context to Discord.
+- **Range phase (9:30–9:45 AM):** Builds all 9 ranges (3 tickers × 3 timeframes) simultaneously. Posts range quality as each locks.
+- **Monitoring (9:35–11:30 AM):** Watches 1-min candle closes against all active ranges. Ranks signals by composite score. Fires alert for the best.
+- **Tracking (signal → 4:00 PM):** Monitors target, stop, failure, trailing stop. Posts updates.
+- **Close (4:00 PM):** Final exit, daily summary, disconnect.
 
 ### 2. Web Dashboard (Next.js)
 
-A lightweight web app for visibility and configuration:
-
-- **Live View** — today's opening ranges, breakout status, key levels, and active signal P/L
-- **History** — past signals with outcomes, win rates, performance stats, grade analysis
-- **Settings** — manage watchlist, strategy parameters, filters, Discord webhook
+- **Live View** — all 9 ranges displayed as visual bars, current price overlaid, status per combo
+- **History** — past signals with outcomes, win rates, performance by grade/ticker/timeframe
+- **Settings** — watchlist, filter toggles, Discord webhook
 
 ### 3. SQLite Database
 
-Shared between both services. Single user, moderate data volume — SQLite is the right fit.
+Shared between services. Single user.
 
 ## Discord Alerts
 
-Uses a simple webhook (no bot needed). Message types:
+Webhook-based (no bot needed).
 
 **Session start (9:25 AM):**
 ```
-📊 ORB Session Starting
-Watching: SPY, QQQ, AAPL
-Candle: 15 min | Trend filter: ON
-SPY: above 20-SMA ✅ | gap +0.3% ↑
-QQQ: above 20-SMA ✅ | gap +0.1% ↑
-AAPL: below 20-SMA ⚠️ (shorts only)
+ORB Session Starting
+Watching: BTC, ETH, SOL
+Timeframes: 5 / 10 / 15 min (auto-pick best)
+BTC: above 20-SMA | gap +1.2% UP | slope: +2.1% (trending)
+ETH: above 20-SMA | gap +0.8% UP | slope: +1.8% (trending)
+SOL: below 20-SMA | gap -0.5% DN | slope: -1.4% (shorts only)
 ```
 
-**Range established (after first candle closes):**
+**Range established:**
 ```
-📐 SPY Opening Range Set  [A]
-High: $543.10 | Low: $542.30 | Width: $0.80
-VWAP: $542.85 | ATR: $3.20 (range = 25%)
-Volume: 1.8M (142% of avg) ✅
-Prior day H/L: $544.50 / $540.20
-Watching for breakout until 11:30 AM...
+BTC 10-min Range Set  [A]
+High: $64,280 | Low: $63,850 | Width: $430
+VWAP: $64,100 | ATR: $1,450 (range = 30%)
+Volume: 142% of avg
+Watching for breakout...
 ```
 
-**Today's trade (breakout signal):**
+**Today's trade:**
 ```
-🟢 ORB LONG — SPY  [A]  ⭐ BEST SETUP
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Entry:   $543.12
-Stop:    $542.30 (range low)
-Target:  $543.92 (measured move, 1R)
-Risk:    $0.82/share
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Above VWAP ($542.85)
-✅ Trend: above 20-SMA
-✅ Gap: +0.3% (with gap — high probability)
-✅ Breakout vol: 185% of avg
-✅ Ranked #1 of 2 valid setups
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-This is today's ONE trade. Day is done after this.
-Time: 9:47 AM ET
+ORB LONG — BTC 10-min  [A]  BEST SETUP
+Entry:   $64,300
+Stop:    $63,850 (range low)
+Target:  $64,730 (measured move, 1R)
+Risk:    $450
+---
+Above VWAP ($64,100)
+Trend: above 20-SMA, slope +2.1%
+Gap: +1.2% (with gap)
+Breakout vol: 185% of avg
+Ranked #1 of 4 valid setups
+---
+Timeframe: 10-min (scored highest across 5/10/15)
+This is today's ONE trade.
 ```
 
 **Target hit:**
 ```
-🎯 SPY LONG — Target hit at $543.92 (+$0.80, 1R)
-Stop moved to breakeven ($543.12).
-Trail below 9-EMA if you're riding the runner.
+BTC LONG — Target hit at $64,730 (+$430, 1R)
+Stop moved to breakeven ($64,300).
+Trail below 9-EMA for the runner.
 ```
 
 **Trade closed:**
 ```
-🏁 SPY LONG — Done.
-Exit: $544.35 (trailed out above target)
-Result: +$1.23/share (1.5R) ✅ WIN
-Day is complete.
+BTC LONG — Done.
+Exit: $65,100 (trailed out)
+Result: +$800 (1.8R) WIN
 ```
 
 **No trade today (11:30 AM):**
 ```
-🚫 No trade today.
-No setup passed all filters. Sitting out is the right call.
-SPY: range too wide (82% of ATR)
-QQQ: below VWAP at breakout
-AAPL: no breakout before cutoff
+No trade today.
+BTC: range too wide (82% of ATR)
+ETH: below VWAP at breakout
+SOL: SMA flat, skipped (stagnant)
 ```
 
 **Daily summary (4:00 PM):**
 ```
-📋 ORB Daily Summary — Jun 9
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Trade: SPY 🟢 LONG [A] → ✅ WIN
-Entry $543.12 → Exit $544.35
-Result: +$1.23/share (1.5R)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Also qualified: QQQ (not taken, ranked #2)
-Skipped: AAPL (below VWAP)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Running: 58% win rate (23W-17L)
-Grade A signals: 68% win rate
-Streak: 3W
+ORB Daily Summary — Jun 9
+Trade: BTC LONG 10-min [A] -> WIN
+Entry $64,300 -> Exit $65,100
+Result: +$800 (1.8R)
+---
+Also qualified: ETH 15-min (ranked #2)
+Skipped: SOL (SMA flat)
+---
+Running: 68% win rate (17W-8L)
+Grade A signals: 75% win rate
+Best timeframe: 10-min (72% WR)
 ```
 
 ## Web Dashboard Detail
 
 ### Live View (home page)
 
-Per-ticker cards showing:
-- **Opening range** as a visual bar (low—high) with current price marker, VWAP line, and prior day levels overlaid
-- **Key levels:** prior day H/L, overnight H/L, VWAP — all drawn on the range bar
-- **Status badge:** "Pre-market" → "Building range…" → "Watching…" → "LONG [A] ✅" / "SHORT [B] 🔴" / "Skipped" / "No breakout" / "Past cutoff"
-- **Filters summary:** trend (✅/⚠️), VWAP position, gap direction, volume status
-- **Signal details** (if triggered): entry, stop, target, current P/L, trailing stop level
-- **Time info:** time since open, time since signal, time until cutoff
+**Top bar:** Market status, tickers watched, today's trade status.
 
-Top bar shows: market status (pre-market / open / past cutoff / closed), tickers watched, today's trade status ("Waiting for setup" / "SPY LONG active" / "Done — WIN +$1.23" / "No trade today").
+**Range grid:** 3 tickers × 3 timeframes = 9 cards. Each shows:
+- Range as a visual bar (low—high) with current price marker and VWAP line
+- Status: "Building..." → "Watching..." → "LONG [A]" / "Skipped" / "No breakout"
+- Grade badge, filter results, volume status
+- Highlighted border on the selected (best) signal
+
+**Active trade panel (when signal fires):**
+- Entry, stop, target, current P/L, trailing stop level
+- Time since entry, R multiple updating live
 
 ### History Page
 
-- **Summary stats at top:** total signals, win rate, average R, best streak, worst streak, profit factor, win rate by grade (A/B/C)
-- **Filterable table:** date, ticker, direction, grade, entry, stop, target, outcome, R multiple, exit type, duration, gap context, ranking score
-- **Filters:** ticker, direction, outcome, grade, exit type, date range
-- **Per-ticker breakdown:** which tickers have the best ORB win rate
-- **Grade analysis:** win rate and average R broken down by A/B/C grade — validates whether the grading system works
+- **Summary stats:** total signals, win rate, avg R, best streak, profit factor
+- **Breakdowns:** by grade (A/B/C), by ticker (BTC/ETH/SOL), by timeframe (5/10/15), by direction (LONG/SHORT), by market phase
+- **Table:** date, ticker, timeframe, direction, grade, entry, exit, outcome, R, exit type
 
 ### Settings Page
 
-**Strategy:**
-- Watchlist: add/remove tickers
-- Candle size: 5 / 15 / 30 minutes (default 15)
-- Stop placement: full range (default) or mid-range (tighter stop, higher R but more stops hit)
+**Tickers:** BTC, ETH, SOL (add/remove)
+
+**Timeframes:** Toggle which to scan (5/10/15 min, all on by default)
 
 **Filters:**
-- Trend filter (20-SMA): ON/OFF (default ON)
-- VWAP alignment: ON/OFF (default ON)
-- Candle close quality (top/bottom 30%): ON/OFF (default ON)
-- Volume on breakout candle: ON/OFF (default ON)
+- Trend filter (20-SMA): ON/OFF
+- SMA slope stagnant threshold: default ±0.5% (downgrade), ±0.2% (skip)
+- VWAP alignment: ON/OFF
+- Candle close quality (30%): ON/OFF
+- Volume on breakout: ON/OFF
 - Max range vs ATR: default 75%
-- Max range as % of price: default 0.8%
-- Min range as % of price: default 0.05%
-- Min opening range volume ratio: default 50%
 - Time cutoff: default 11:30 AM ET
 
 **Exits:**
-- Target: measured move / 1R (default — clean 1:1 risk/reward)
-- Trailing stop after target: 9-EMA (default) or VWAP
-- Failure exit (close back inside range): ON/OFF (default ON)
-- Time exit (2 hours): ON/OFF (default ON)
-
-**Discipline:**
-- Trades per day: 1 (hardcoded — this is the core philosophy)
-- Selection delay: 2 minutes (wait after first valid breakout to see if a better ticker qualifies)
+- Target: measured move / 1R
+- Trailing stop: 9-EMA or VWAP
+- Failure exit: ON/OFF
+- Time exit (2 hours): ON/OFF
 
 **Alerts:**
-- Discord webhook URL with test button
-- Alert on skipped signals: ON/OFF (default ON)
-- Alert on signal updates (T1 hit, trailing): ON/OFF (default ON)
-
-**Engine:**
-- Start/stop toggle, status indicator
+- Discord webhook URL + test button
+- Alert skipped signals: ON/OFF
+- Alert updates: ON/OFF
 
 ## Data Model
 
-### Tables
+### signals
 
-**signals**
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER PK | Auto-increment |
-| ticker | TEXT | e.g., "SPY" |
+| ticker | TEXT | "BTC", "ETH", "SOL" |
 | date | TEXT | Trading date (YYYY-MM-DD) |
+| timeframe | INTEGER | 5, 10, or 15 (minutes) |
 | direction | TEXT | "LONG" or "SHORT" |
-| grade | TEXT | "A", "B", "C", or NULL (if skipped) |
-| candle_size | INTEGER | 5, 15, or 30 |
+| grade | TEXT | "A", "B", "C" |
 | range_high | REAL | Opening range high |
 | range_low | REAL | Opening range low |
 | range_width | REAL | High minus low |
 | entry_price | REAL | Breakout candle close |
-| stop_price | REAL | Stop loss price |
-| target_price | REAL | Measured move target (1R) |
-| risk_per_share | REAL | Range width (or half if mid-range stop) |
+| stop_price | REAL | Stop loss |
+| target_price | REAL | Measured move target |
+| risk | REAL | Entry to stop distance |
 | signal_time | TEXT | ISO timestamp |
-| vwap_at_entry | REAL | VWAP at time of breakout |
-| breakout_candle_vol | INTEGER | Volume of the breakout candle |
-| breakout_candle_quality | REAL | Where close falls in candle range (0.0–1.0) |
-| outcome | TEXT | "WIN", "LOSS", "SCRATCH", or NULL |
+| vwap_at_entry | REAL | VWAP at breakout |
+| breakout_volume_ratio | REAL | Breakout vol / avg vol |
+| breakout_candle_quality | REAL | Close position in range (0–1) |
+| outcome | TEXT | "WIN", "LOSS", "SCRATCH", NULL |
 | exit_type | TEXT | "target", "stop", "trail", "failure", "time", "eod" |
 | exit_price | REAL | Price at exit |
-| exit_time | TEXT | When position was exited |
-| r_multiple | REAL | Actual R achieved (profit / risk) |
-| target_hit | INTEGER | 1 if target was reached, 0 if not |
-| ranking_score | REAL | Composite score used to pick this as today's trade |
-| was_selected | INTEGER | 1 if this was today's chosen trade, 0 if it qualified but wasn't picked |
+| exit_time | TEXT | When exited |
+| r_multiple | REAL | Actual R achieved |
+| target_hit | INTEGER | 1 if target reached |
+| ranking_score | REAL | Composite score |
+| was_selected | INTEGER | 1 if this was today's trade |
 | max_favorable | REAL | Best price in signal direction |
 | max_adverse | REAL | Worst price against signal |
-| skipped | INTEGER | 1 if filtered out, 0 otherwise |
-| skip_reason | TEXT | Why skipped (NULL if not skipped) |
-| range_atr_pct | REAL | Range width as % of ATR |
-| gap_pct | REAL | Pre-market gap as % of prior close |
-| gap_aligned | INTEGER | 1 if signal direction matches gap, 0 if against |
-| trend_aligned | INTEGER | 1 if signal aligns with 20-SMA, 0 if not |
+| skipped | INTEGER | 1 if filtered out |
+| skip_reason | TEXT | Why skipped |
+| range_atr_pct | REAL | Range as % of ATR |
+| gap_pct | REAL | Gap as % of prior close |
+| gap_aligned | INTEGER | 1 if direction matches gap |
+| trend_aligned | INTEGER | 1 if aligns with SMA |
+| sma_slope | REAL | 20-SMA 5-day slope % |
 
-**opening_ranges**
+### opening_ranges
+
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER PK | Auto-increment |
-| ticker | TEXT | e.g., "SPY" |
+| ticker | TEXT | "BTC", "ETH", "SOL" |
 | date | TEXT | Trading date |
-| candle_size | INTEGER | Minutes |
-| range_high | REAL | High of first candle |
-| range_low | REAL | Low of first candle |
+| timeframe | INTEGER | 5, 10, or 15 |
+| range_high | REAL | High of range candle |
+| range_low | REAL | Low of range candle |
 | range_width | REAL | High minus low |
-| open_price | REAL | Market open price |
-| close_price | REAL | First candle close |
-| volume | INTEGER | First candle volume |
-| vwap_at_close | REAL | VWAP when range candle closed |
-| atr_14 | REAL | 14-day ATR for this ticker |
-| sma_20 | REAL | 20-day SMA for this ticker |
+| open_price | REAL | Session open price |
+| close_price | REAL | Range candle close |
+| volume | REAL | Range candle volume |
+| vwap_at_close | REAL | VWAP when range locked |
+| atr_14 | REAL | 14-day ATR |
+| sma_20 | REAL | 20-day SMA |
+| sma_slope | REAL | SMA rate of change |
 | prior_day_high | REAL | Yesterday's high |
 | prior_day_low | REAL | Yesterday's low |
 | prior_day_close | REAL | Yesterday's close |
-| overnight_high | REAL | Overnight session high |
-| overnight_low | REAL | Overnight session low |
-| premarket_price | REAL | Price just before 9:30 open |
-| gap_pct | REAL | Gap size as % of prior close |
-| gap_direction | TEXT | "UP", "DOWN", or "FLAT" |
-| quality_grade | TEXT | "A", "B", "C", or "SKIP" |
-| skip_reason | TEXT | Why skipped (NULL if tradeable) |
+| premarket_price | REAL | Price just before session |
+| gap_pct | REAL | Gap as % |
+| gap_direction | TEXT | "UP", "DOWN", "FLAT" |
+| quality_grade | TEXT | "A", "B", "C", "SKIP" |
+| skip_reason | TEXT | Why skipped |
 
-**settings**
+### settings
+
 | Column | Type | Description |
 |--------|------|-------------|
 | key | TEXT PK | Setting name |
 | value | TEXT | JSON-encoded value |
 
-Settings keys: `watchlist`, `candle_size`, `stop_placement`, `trend_filter`, `vwap_filter`, `candle_quality_filter`, `breakout_volume_filter`, `max_range_atr_pct`, `max_range_price_pct`, `min_range_price_pct`, `min_volume_ratio`, `time_cutoff`, `selection_delay_sec`, `trailing_stop_method`, `failure_exit`, `time_exit`, `discord_webhook_url`, `alert_skipped`, `alert_updates`.
-
 ## Stack
 
-- **Signal Engine:** Node.js, TypeScript, @alpacahq/alpaca-trade-api (WebSocket + REST for historical data), better-sqlite3, node-cron
+- **Signal Engine:** Node.js, TypeScript, Alpaca crypto WebSocket + REST, better-sqlite3, node-cron
 - **Web Dashboard:** Next.js (App Router), TypeScript, Tailwind CSS
 - **Database:** SQLite via better-sqlite3
-- **Alerts:** Discord webhook (simple HTTP POST, no bot token needed)
-- **UI Theme:** Dark theme matching PolySignal (#131722 backgrounds, #00c853 green, #ff3d00 red, #4f8fea blue accent)
+- **Alerts:** Discord webhook (HTTP POST)
+- **Theme:** Dark (#131722 bg, #00c853 green, #ff3d00 red, #4f8fea blue)
 
 ## Deployment
 
-- **Signal Engine:** Railway (always-on container) or PM2 on a home machine / VPS
+- **Signal Engine:** Railway or PM2 on VPS (always-on)
 - **Web Dashboard:** Vercel
-- **Database:** SQLite file on the engine's host
+- **Database:** SQLite on engine host
 
-For simplest setup: run both services on the same machine (Railway or VPS) so they share the SQLite file directly.
+Simplest: run both on the same machine sharing the SQLite file.
 
-## Scope Boundaries
+## Scope
 
-**In scope (v1):**
-- Signal engine with Alpaca WebSocket + REST integration
-- Pre-market context gathering (prior day levels, overnight H/L, gap, 20-SMA, ATR)
-- Opening range construction (5/15/30 min configurable, default 15)
-- Full signal quality gate (trend, VWAP, ATR, volume, range %)
-- Breakout detection with candle close quality + VWAP + volume confirmation
-- One-trade-per-day discipline with composite ranking to pick the single best setup
-- Clean exit system (target, stop, trailing stop, failure exit, time exit)
-- One-and-done rule, 11:30 AM time cutoff
-- Quality grading (A/B/C) with grade-based performance tracking
-- Gap context in alerts and outcome analysis
-- Discord webhook alerts (session start, range, breakout, updates, exits, skips, daily summary)
-- Web dashboard: live view with key levels, history with grade analysis, settings
+**v1:**
+- Signal engine with Alpaca crypto WebSocket
+- Multi-timeframe range construction (5/10/15 min simultaneous)
+- Full quality gate with SMA slope stagnant detection
+- Composite ranking across tickers AND timeframes
+- One-trade-per-day discipline
+- Exit system (target, stop, trailing, failure, time)
+- Discord alerts
+- Web dashboard (live view, history, settings)
 - SQLite storage
-- Dark theme UI
 
-**Out of scope (v1, could add later):**
+**Later:**
 - Trade execution
-- Backtesting against historical data
-- Multiple alert channels (SMS, Telegram, email)
-- Relative strength / sector rotation analysis
-- Multi-user support
-- Mobile app (responsive web is sufficient)
+- Additional crypto pairs
+- US stock support (secondary)
+- Backtesting module
+- Mobile push notifications
