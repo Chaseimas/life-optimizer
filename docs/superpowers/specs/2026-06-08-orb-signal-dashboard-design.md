@@ -65,19 +65,28 @@ For each ticker, during the first N minutes after 9:30 AM:
 
 ### Signal Quality Filter
 
-Not every opening range produces a good trade. Before alerting, the engine checks:
+Not every opening range produces a good trade. The engine evaluates setup quality using ratio-based filters that scale with any position size or ticker price:
 
-- **Max risk per share:** Skip if range width exceeds a configurable cap (e.g., $2.00). A $3 wide range on SPY means risking $3/share to make $3 at 1:1 — not worth it for most setups.
-- **Min range width:** Skip if range is too narrow (e.g., < $0.15). Extremely tight ranges whipsaw and produce false breakouts.
-- **Max range as % of price:** Skip if range width is more than a configurable percentage of the stock price (e.g., 0.5%). Normalizes risk across different-priced tickers — $1 risk on a $50 stock is very different from $1 on a $500 stock.
-- **Volume check:** Skip if the opening range candle's volume is abnormally low (below 50% of the ticker's average first-candle volume). Low volume ranges are unreliable.
+- **Range vs ATR (Average True Range):** The most important filter. Compares today's opening range width to the ticker's 14-day ATR. If the range already eats up most of the typical daily move, there's no room left for the breakout to run. Skip if range > 75% of ATR (configurable). Example: SPY's ATR is $4.00, today's opening range is $3.50 (87% of ATR) — skip, the move is already spent.
+- **Range as % of price:** Skip if range width is too large a percentage of the stock price (default > 0.8%). A $1 range on a $50 stock (2%) is a wild open — likely to chop. A $1 range on a $500 stock (0.2%) is normal. This scales naturally regardless of position size.
+- **Min range width as % of price:** Skip if range is too tight (default < 0.05% of price). Ultra-narrow ranges produce false breakouts from normal noise.
+- **Volume check:** Skip if the opening range candle's volume is abnormally low (below 50% of the ticker's trailing 10-day average first-candle volume). Low volume ranges are unreliable — the breakout has no conviction behind it.
+- **Breakout room score:** Combines range-vs-ATR with the R/R ratio to estimate whether there's enough potential move left to justify the risk. If the remaining ATR (ATR minus range width) is less than the risk (range width), the expected reward doesn't justify the stop distance — skip.
 
-When a signal is skipped, the engine still logs it to the database (with a `skipped` flag and the reason) and posts a muted Discord message so you can review whether the filters are too aggressive:
+All filters are percentage/ratio-based so they work identically whether you're trading 10 shares or 10,000.
+
+When a signal is skipped, the engine still logs it (with a `skipped` flag and the reason) and posts a muted Discord message:
 
 ```
 ⏭️ SPY — LONG breakout skipped
-Reason: Range too wide ($2.85 risk, max $2.00)
+Range is 87% of ATR — not enough room to run
 ```
+
+When a signal passes all filters, the alert includes a quality grade so you can gauge confidence at a glance:
+
+- **A grade:** Range < 40% of ATR, good volume, plenty of room → strong setup
+- **B grade:** Range 40-60% of ATR, adequate volume → decent setup
+- **C grade:** Range 60-75% of ATR, borderline → proceed with caution
 
 All filter thresholds are configurable in Settings.
 
@@ -135,17 +144,18 @@ Watching for breakout...
 
 **Breakout signal:**
 ```
-🟢 ORB LONG — SPY
-━━━━━━━━━━━━━━━━━━
+🟢 ORB LONG — SPY  [A]
+━━━━━━━━━━━━━━━━━━━━━━
 Entry:   $543.12
 Stop:    $542.30 (range low)
 Target:  $544.32 (1.5:1 R/R)
 Risk:    $0.82/share
-Range:   $542.30 — $543.10
+Range:   $542.30 — $543.10 (32% of ATR)
+Room:    $2.68 remaining ATR
 Time:    9:37 AM ET
 ```
 
-(🔴 for SHORT signals)
+(🔴 for SHORT signals, letter grade A/B/C shown in brackets)
 
 **Daily summary (4:00 PM):**
 ```
@@ -184,10 +194,10 @@ Top bar shows: market status (pre-market / open / closed), number of tickers wat
 - **Risk/Reward target:** 1:1, 1.5:1, 2:1 (radio buttons)
 - **Breakout confirmation:** "Candle close above range" (default, fewer false signals) vs "Any tick above range" (faster, more signals)
 - **Signal filters:**
-  - Max risk per share ($) — default $2.00
-  - Min range width ($) — default $0.15
-  - Max range as % of price — default 0.5%
-  - Min volume ratio vs average — default 50%
+  - Max range vs ATR — default 75% (skip if opening range eats most of the daily move)
+  - Max range as % of price — default 0.8%
+  - Min range as % of price — default 0.05%
+  - Min volume ratio vs 10-day avg — default 50%
 - **Discord webhook URL:** text input with test button
 - **Engine control:** start/stop toggle, status indicator
 
@@ -218,6 +228,8 @@ Top bar shows: market status (pre-market / open / closed), number of tickers wat
 | max_adverse | REAL | Worst price against signal |
 | skipped | INTEGER | 1 if signal was filtered out, 0 otherwise |
 | skip_reason | TEXT | Why signal was skipped (NULL if not skipped) |
+| grade | TEXT | Quality grade: A, B, or C (NULL if skipped) |
+| range_atr_pct | REAL | Range width as percentage of ATR |
 
 **opening_ranges**
 | Column | Type | Description |
@@ -238,7 +250,7 @@ Top bar shows: market status (pre-market / open / closed), number of tickers wat
 | key | TEXT PK | Setting name |
 | value | TEXT | JSON-encoded value |
 
-Settings keys: `watchlist`, `candle_size`, `risk_reward`, `breakout_mode`, `discord_webhook_url`, `max_risk_per_share`, `min_range_width`, `max_range_pct`, `min_volume_ratio`.
+Settings keys: `watchlist`, `candle_size`, `risk_reward`, `breakout_mode`, `discord_webhook_url`, `max_range_atr_pct`, `max_range_price_pct`, `min_range_price_pct`, `min_volume_ratio`.
 
 ## Stack
 
