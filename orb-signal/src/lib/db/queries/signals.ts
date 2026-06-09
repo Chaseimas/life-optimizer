@@ -79,6 +79,21 @@ export function getSignalHistory(limit = 100, offset = 0) {
   ).all(limit, offset);
 }
 
+export function getDailyReturns() {
+  return getDb().prepare(`
+    SELECT
+      date,
+      COUNT(*) as trades,
+      SUM(CASE WHEN outcome = 'WIN' THEN 1 ELSE 0 END) as wins,
+      SUM(CASE WHEN outcome = 'LOSS' THEN 1 ELSE 0 END) as losses,
+      COALESCE(SUM(r_multiple), 0) as day_r
+    FROM signals
+    WHERE was_selected = 1 AND outcome IS NOT NULL
+    GROUP BY date
+    ORDER BY date ASC
+  `).all() as { date: string; trades: number; wins: number; losses: number; day_r: number }[];
+}
+
 export function getPerformanceStats() {
   const db = getDb();
   return db.prepare(`
