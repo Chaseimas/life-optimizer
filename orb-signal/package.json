@@ -9,7 +9,8 @@
     "lint": "eslint",
     "engine": "tsx --env-file=.env.local src/engine/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "backtest": "tsx --env-file=.env.local src/backtest/run.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
