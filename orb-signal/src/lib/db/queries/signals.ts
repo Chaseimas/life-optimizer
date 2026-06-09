@@ -87,9 +87,14 @@ export function getPerformanceStats() {
       SUM(CASE WHEN outcome = 'WIN' THEN 1 ELSE 0 END) as wins,
       SUM(CASE WHEN outcome = 'LOSS' THEN 1 ELSE 0 END) as losses,
       SUM(CASE WHEN outcome = 'SCRATCH' THEN 1 ELSE 0 END) as scratches,
+      COALESCE(SUM(r_multiple), 0) as total_r,
       AVG(r_multiple) as avg_r,
       AVG(CASE WHEN outcome = 'WIN' THEN r_multiple END) as avg_win_r,
-      AVG(CASE WHEN outcome = 'LOSS' THEN r_multiple END) as avg_loss_r
+      AVG(CASE WHEN outcome = 'LOSS' THEN r_multiple END) as avg_loss_r,
+      CASE WHEN SUM(CASE WHEN r_multiple < 0 THEN ABS(r_multiple) ELSE 0 END) > 0
+        THEN SUM(CASE WHEN r_multiple > 0 THEN r_multiple ELSE 0 END) /
+             SUM(CASE WHEN r_multiple < 0 THEN ABS(r_multiple) ELSE 0 END)
+        ELSE 0 END as profit_factor
     FROM signals WHERE was_selected = 1 AND outcome IS NOT NULL
   `).get();
 }

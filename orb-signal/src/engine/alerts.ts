@@ -105,7 +105,7 @@ export async function alertNoTrade(reasons: { ticker: string; reason: string }[]
 export async function alertDailySummary(
   signals: ActiveSignal[],
   skipped: { ticker: string; reason: string }[],
-  stats: { winRate: number; wins: number; losses: number }
+  stats: { winRate: number; wins: number; losses: number; totalR: number }
 ): Promise<void> {
   const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const lines = [`**ORB Daily Summary — ${date}**`];
@@ -113,19 +113,23 @@ export async function alertDailySummary(
   if (signals.length === 0) {
     lines.push("No trades taken today.");
   } else {
+    let dayR = 0;
     for (let i = 0; i < signals.length; i++) {
       const s = signals[i];
       const pnl = s.direction === "LONG"
         ? (s.exitPrice ?? s.entryPrice) - s.entryPrice
         : s.entryPrice - (s.exitPrice ?? s.entryPrice);
-      lines.push(`Trade ${i + 1}: ${s.ticker} ${s.direction} ${s.timeframe}-min [${s.grade}] -> ${s.outcome} ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(0)} (${s.rMultiple?.toFixed(1)}R)`);
+      const r = s.rMultiple ?? 0;
+      dayR += r;
+      lines.push(`Trade ${i + 1}: ${s.ticker} ${s.direction} ${s.timeframe}-min [${s.grade}] → ${s.outcome} ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(0)} (${r >= 0 ? "+" : ""}${r.toFixed(2)}R)`);
     }
+    lines.push(`**Day total: ${dayR >= 0 ? "+" : ""}${dayR.toFixed(2)}R**`);
   }
 
   lines.push("---");
   for (const s of skipped) lines.push(`Skipped: ${s.ticker} (${s.reason})`);
   lines.push("---");
-  lines.push(`Running: ${stats.winRate.toFixed(0)}% win rate (${stats.wins}W-${stats.losses}L)`);
+  lines.push(`Running: ${stats.winRate.toFixed(0)}% win rate (${stats.wins}W-${stats.losses}L) | Cumulative: ${stats.totalR >= 0 ? "+" : ""}${stats.totalR.toFixed(2)}R`);
 
   await sendDiscordMessage(lines.join("\n"));
 }

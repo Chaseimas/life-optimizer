@@ -6,7 +6,10 @@ export const dynamic = "force-dynamic";
 
 export default function HistoryPage() {
   const signals = getSignalHistory(100, 0) as any[];
-  const stats = (getPerformanceStats() ?? { total: 0, wins: 0, losses: 0, scratches: 0, avg_r: null }) as any;
+  const stats = (getPerformanceStats() ?? {
+    total: 0, wins: 0, losses: 0, scratches: 0,
+    total_r: 0, avg_r: null, avg_win_r: null, avg_loss_r: null, profit_factor: 0,
+  }) as any;
 
   return (
     <div>

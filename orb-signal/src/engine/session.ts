@@ -8,7 +8,7 @@ import { checkBreakout } from "./breakout-detector";
 import { calcCompositeScore, selectTrades } from "./ranking";
 import { checkExit, calcTrailingStop } from "./exit-tracker";
 import { insertRange } from "@/lib/db/queries/ranges";
-import { insertSignal, updateSignalOutcome } from "@/lib/db/queries/signals";
+import { insertSignal, updateSignalOutcome, getPerformanceStats } from "@/lib/db/queries/signals";
 import * as alerts from "./alerts";
 import type {
   Bar, DailyContext, OpeningRange, Signal, ActiveSignal,
@@ -457,12 +457,15 @@ export class SessionManager {
         });
       }
 
-      const stats = { winRate: 0, wins: 0, losses: 0 };
+      const stats = { winRate: 0, wins: 0, losses: 0, totalR: 0 };
       const completed = this.selectedSignals.filter(s => s.outcome);
       if (completed.length > 0) {
         stats.wins = completed.filter(s => s.outcome === "WIN").length;
         stats.losses = completed.filter(s => s.outcome === "LOSS").length;
         stats.winRate = (stats.wins / completed.length) * 100;
+        // Cumulative R from DB (all-time, not just today)
+        const perfStats = getPerformanceStats() as { total_r?: number } | undefined;
+        stats.totalR = perfStats?.total_r ?? 0;
       }
 
       await alerts.alertDailySummary(this.selectedSignals, this.skippedReasons, stats);
