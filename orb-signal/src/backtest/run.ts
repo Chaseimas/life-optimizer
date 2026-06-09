@@ -31,7 +31,7 @@ const DEFAULTS = {
   selectionDelayBars: 2,
   // ── Optimization params ──
   failurePatience: 1,       // 1=instant exit on failure (patience >1 tested but caused stop-outs)
-  retestImmunityR: 999,     // disabled — immunity caused stop-outs in testing
+  breakevenThresholdR: 0.3, // move stop to entry after price reaches this R (0=off)
   minBreakoutVolume: 1.0,   // matches base breakout detector minimum
   minCompositeScore: 7,     // filter weak signals — 6-7 range is dead zone in testing
 };
@@ -371,17 +371,23 @@ function simulateDay(
     let exitPrice = p.entryPrice;
     let exitType = "eod";
     let consecutiveFailures = 0;
-    let bestReachedR = 0; // best unrealized R multiple
+    let bestReachedR = 0;
 
     for (let i = p.breakoutBar + 1; i < bars.length; i++) {
       const b = bars[i];
       closeHist.push(b.c);
 
-      // Track best unrealized move (for retest immunity)
+      // Track best unrealized move for breakeven stop
       const unrealized = p.direction === "LONG"
         ? (b.h - p.entryPrice) / p.risk
         : (p.entryPrice - b.l) / p.risk;
       bestReachedR = Math.max(bestReachedR, unrealized);
+
+      // Breakeven stop: once price reaches threshold R, tighten stop to entry
+      // Unlike "immunity" (which kept trades open to die), this CLOSES them at 0R
+      if (!targetHit && DEFAULTS.breakevenThresholdR > 0 && bestReachedR >= DEFAULTS.breakevenThresholdR) {
+        curStop = p.entryPrice;
+      }
 
       const ema9 = closeHist.length >= 9 ? calcEMA(closeHist, 9) : p.entryPrice;
       const trail = targetHit ? calcTrailingStop(p.direction, ema9) : null;
@@ -403,23 +409,14 @@ function simulateDay(
       if (ex) {
         if (ex.type === "target" && !targetHit) {
           targetHit = true;
-          curStop = p.entryPrice; // move stop to breakeven
-          consecutiveFailures = 0;
+          curStop = p.entryPrice;
           continue;
         }
 
-        // Failure patience: require consecutive failure bars before exiting
+        // Failure patience (kept at 1 = instant; >1 tested but caused stop-outs)
         if (ex.type === "failure") {
-          // Retest immunity: if price already moved significantly in our favor,
-          // this is likely a retest, not a true failure
-          if (bestReachedR >= DEFAULTS.retestImmunityR) {
-            consecutiveFailures = 0;
-            continue;
-          }
           consecutiveFailures++;
           if (consecutiveFailures < DEFAULTS.failurePatience) continue;
-        } else {
-          consecutiveFailures = 0;
         }
 
         exitPrice = ex.price;
