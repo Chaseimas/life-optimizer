@@ -1,6 +1,6 @@
 export type Ticker = "BTC/USD" | "ETH/USD" | "SOL/USD";
 export type TickerShort = "BTC" | "ETH" | "SOL";
-export type Timeframe = 5 | 10 | 15;
+export type Timeframe = 5 | 10;
 export type Direction = "LONG" | "SHORT";
 export type Grade = "A" | "B" | "C";
 export type GradeOrSkip = Grade | "SKIP";

@@ -4,7 +4,7 @@ import type { DailyContext, OpeningRange, Signal, ActiveSignal, Outcome } from "
 export async function alertSessionStart(contexts: DailyContext[]): Promise<void> {
   const lines = ["**ORB Session Starting**"];
   lines.push(`Watching: ${contexts.map(c => c.ticker).join(", ")}`);
-  lines.push("Timeframes: 5 / 10 / 15 min (auto-pick best)");
+  lines.push("Timeframes: 5 / 10 min (auto-pick best)");
 
   for (const ctx of contexts) {
     const trend = ctx.premarketPrice > ctx.sma20 ? "above" : "below";

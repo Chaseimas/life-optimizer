@@ -234,6 +234,9 @@ export class SessionManager {
           slopeDowngrade,
         });
 
+        // Skip low-score setups (score 6-7 is a dead zone, 13-18% win rate)
+        if (score.total < DEFAULTS.minCompositeScore) continue;
+
         const signal: Signal = {
           ticker,
           timeframe: tf,
@@ -348,6 +351,16 @@ export class SessionManager {
       } else {
         signal.maxFavorable = Math.min(signal.maxFavorable, bar.low);
         signal.maxAdverse = Math.max(signal.maxAdverse, bar.high);
+      }
+
+      // Breakeven stop: when trade reaches 0.3R in our favor, move stop to entry
+      if (!signal.targetHit && DEFAULTS.breakevenThresholdR > 0 && signal.risk > 0) {
+        const bestReachedR = signal.direction === "LONG"
+          ? (signal.maxFavorable - signal.entryPrice) / signal.risk
+          : (signal.entryPrice - signal.maxFavorable) / signal.risk;
+        if (bestReachedR >= DEFAULTS.breakevenThresholdR) {
+          signal.stopPrice = signal.entryPrice;
+        }
       }
 
       const closes = this.barHistory.get(ticker) ?? [];

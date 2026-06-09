@@ -11,7 +11,7 @@ export const TICKER_FULL: Record<TickerShort, Ticker> = {
   ETH: "ETH/USD",
   SOL: "SOL/USD",
 };
-export const TIMEFRAMES: Timeframe[] = [5, 10, 15];
+export const TIMEFRAMES: Timeframe[] = [5, 10];
 
 export const ALPACA_REST_URL = "https://data.alpaca.markets";
 export const ALPACA_WS_URL = "wss://stream.data.alpaca.markets/v1beta3/crypto/us";
@@ -28,6 +28,9 @@ export const DEFAULTS = {
   timeExitMinutes: 120,
   maxTradesPerDay: 3,
   secondTradeScoreGap: 2,
+  // ── Optimization params ──
+  minCompositeScore: 7,
+  breakevenThresholdR: 0.3,
 } as const;
 
 export const COLORS = {
