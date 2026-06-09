@@ -353,13 +353,18 @@ export class SessionManager {
         signal.maxAdverse = Math.max(signal.maxAdverse, bar.high);
       }
 
-      // Breakeven stop: when trade reaches 0.3R in our favor, move stop to entry
+      // Breakeven stop: when trade reaches 0.15R in our favor, move stop to entry
       if (!signal.targetHit && DEFAULTS.breakevenThresholdR > 0 && signal.risk > 0) {
+        const prevStop = signal.stopPrice;
         const bestReachedR = signal.direction === "LONG"
           ? (signal.maxFavorable - signal.entryPrice) / signal.risk
           : (signal.entryPrice - signal.maxFavorable) / signal.risk;
         if (bestReachedR >= DEFAULTS.breakevenThresholdR) {
           signal.stopPrice = signal.entryPrice;
+          // Alert once when breakeven first triggers
+          if (prevStop !== signal.entryPrice) {
+            await alerts.alertBreakevenHit(signal);
+          }
         }
       }
 

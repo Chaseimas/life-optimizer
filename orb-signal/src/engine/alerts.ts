@@ -52,6 +52,19 @@ export async function alertSignal(signal: Signal, rank: number, totalSelected: n
   await sendDiscordMessage(msg);
 }
 
+export async function alertBreakevenHit(signal: ActiveSignal): Promise<void> {
+  const dir = signal.direction === "LONG" ? "LONG" : "SHORT";
+  const bestR = signal.direction === "LONG"
+    ? (signal.maxFavorable - signal.entryPrice) / signal.risk
+    : (signal.entryPrice - signal.maxFavorable) / signal.risk;
+  const msg = [
+    `**${signal.ticker} ${dir} — Stop → breakeven ($${signal.entryPrice.toLocaleString()})**`,
+    `Reached +${bestR.toFixed(2)}R, protecting at 0R. Target still $${signal.targetPrice.toLocaleString()}.`,
+  ].join("\n");
+
+  await sendDiscordMessage(msg);
+}
+
 export async function alertTargetHit(signal: ActiveSignal): Promise<void> {
   const dir = signal.direction === "LONG" ? "LONG" : "SHORT";
   const pnl = signal.direction === "LONG"
