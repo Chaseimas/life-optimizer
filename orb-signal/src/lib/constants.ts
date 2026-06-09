@@ -1,6 +1,6 @@
 import type { Ticker, TickerShort, Timeframe } from "./types";
 
-export const TICKERS: Ticker[] = ["BTC/USD", "ETH/USD", "SOL/USD"];
+export const TICKERS: Ticker[] = ["ETH/USD", "SOL/USD"];
 export const TICKER_SHORT: Record<Ticker, TickerShort> = {
   "BTC/USD": "BTC",
   "ETH/USD": "ETH",
@@ -24,13 +24,13 @@ export const DEFAULTS = {
   minVolumeRatio: 0.5,
   timeCutoffHour: 11,
   timeCutoffMinute: 30,
-  selectionDelaySec: 120,
+  selectionDelaySec: 60,
   timeExitMinutes: 120,
   maxTradesPerDay: 3,
   secondTradeScoreGap: 2,
   // ── Optimization params ──
   minCompositeScore: 7,
-  breakevenThresholdR: 0.3,
+  breakevenThresholdR: 0.15,
 } as const;
 
 export const COLORS = {

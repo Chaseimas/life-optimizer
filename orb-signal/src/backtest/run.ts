@@ -9,16 +9,16 @@ import type { AlpacaBar, Grade, Direction } from "@/lib/types";
 // ═══════════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════════
-const BT_TICKERS = ["BTC/USD", "ETH/USD", "SOL/USD"];
+const BT_TICKERS = ["ETH/USD", "SOL/USD"];
 const BT_SHORT: Record<string, string> = {
-  "BTC/USD": "BTC", "ETH/USD": "ETH", "SOL/USD": "SOL",
+  "ETH/USD": "ETH", "SOL/USD": "SOL",
 };
 const TIMEFRAMES = [5, 10] as const;
 const START_DATE = "2026-02-08";
 const END_DATE = "2026-06-08";
 const CONTEXT_START = "2025-12-01"; // extra lookback for SMA20/ATR14
 
-const DEFAULTS = {
+let DEFAULTS = {
   maxRangeAtrPct: 75,
   smaDowngradeThreshold: 0.5,
   smaSlopSkipThreshold: 0.2,
@@ -28,10 +28,10 @@ const DEFAULTS = {
   timeExitMinutes: 120,
   maxTradesPerDay: 3,
   secondTradeScoreGap: 2,
-  selectionDelayBars: 2,
+  selectionDelayBars: 1,
   // ── Optimization params ──
   failurePatience: 1,       // 1=instant exit on failure (patience >1 tested but caused stop-outs)
-  breakevenThresholdR: 0.3, // move stop to entry after price reaches this R (0=off)
+  breakevenThresholdR: 0.15, // move stop to entry after price reaches this R (0=off)
   minBreakoutVolume: 1.0,   // matches base breakout detector minimum
   minCompositeScore: 7,     // filter weak signals — 6-7 range is dead zone in testing
 };
@@ -65,6 +65,9 @@ interface Trade {
   outcome: "WIN" | "LOSS" | "SCRATCH";
   rMultiple: number;
   score: number;
+  breakoutBar: number;
+  gapPct: number;
+  rangeAtrPct: number;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -438,6 +441,7 @@ function simulateDay(
       entryPrice: p.entryPrice, stopPrice: p.stopPrice,
       targetPrice: p.targetPrice, risk: p.risk,
       exitPrice, exitType, outcome, rMultiple: rMul, score: p.score,
+      breakoutBar: p.breakoutBar, gapPct: p.gapPct, rangeAtrPct: p.rangeAtrPct,
     });
   }
 
@@ -642,6 +646,242 @@ function printReport(allTrades: Trade[], tradingDays: number) {
   console.log("");
   console.log(`  Total: ${totalR >= 0 ? "+" : ""}${totalR.toFixed(2)}R across ${allTrades.length} trades over ${tradingDays} trading days`);
   console.log("");
+
+  // By day of week
+  console.log("BY DAY OF WEEK");
+  console.log("─".repeat(60));
+  console.log("  Day       Trades   Win%      Avg R     Total R");
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  for (let dow = 1; dow <= 5; dow++) {
+    const tt = allTrades.filter(t => new Date(t.date + "T12:00:00Z").getUTCDay() === dow);
+    if (tt.length === 0) { console.log(`  ${dayNames[dow].padEnd(10)} 0`); continue; }
+    const w = tt.filter(t => t.outcome === "WIN").length;
+    const wr = (w / tt.length * 100).toFixed(1);
+    const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
+    const tr = tt.reduce((s, t) => s + t.rMultiple, 0).toFixed(2);
+    console.log(`  ${dayNames[dow].padEnd(10)} ${String(tt.length).padEnd(8)} ${(wr + "%").padEnd(9)} ${(Number(ar) >= 0 ? "+" : "") + ar}R    ${(Number(tr) >= 0 ? "+" : "") + tr}R`);
+  }
+  console.log("");
+
+  // By breakout timing
+  console.log("BY BREAKOUT TIMING (bars after 9:30)");
+  console.log("─".repeat(60));
+  console.log("  Window      Trades   Win%      Avg R     Total R");
+  const timeBuckets = [
+    { label: "16-40 (early)", lo: 16, hi: 40 },
+    { label: "40-70 (mid)", lo: 40, hi: 70 },
+    { label: "70-100 (late)", lo: 70, hi: 100 },
+    { label: "100-120 (v.late)", lo: 100, hi: 120 },
+  ];
+  for (const tb of timeBuckets) {
+    const tt = allTrades.filter(t => t.breakoutBar >= tb.lo && t.breakoutBar < tb.hi);
+    if (tt.length === 0) continue;
+    const w = tt.filter(t => t.outcome === "WIN").length;
+    const wr = (w / tt.length * 100).toFixed(1);
+    const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
+    const tr = tt.reduce((s, t) => s + t.rMultiple, 0).toFixed(2);
+    console.log(`  ${tb.label.padEnd(18)} ${String(tt.length).padEnd(8)} ${(wr + "%").padEnd(9)} ${(Number(ar) >= 0 ? "+" : "") + ar}R    ${(Number(tr) >= 0 ? "+" : "") + tr}R`);
+  }
+  console.log("");
+
+  // By gap size
+  console.log("BY GAP SIZE");
+  console.log("─".repeat(60));
+  console.log("  Gap          Trades   Win%      Avg R     Total R");
+  const gapBuckets = [
+    { label: "tiny (<0.3%)", lo: 0, hi: 0.3 },
+    { label: "small (0.3-1%)", lo: 0.3, hi: 1.0 },
+    { label: "medium (1-2%)", lo: 1.0, hi: 2.0 },
+    { label: "large (2-4%)", lo: 2.0, hi: 4.0 },
+    { label: "huge (>4%)", lo: 4.0, hi: 100 },
+  ];
+  for (const gb of gapBuckets) {
+    const tt = allTrades.filter(t => Math.abs(t.gapPct) >= gb.lo && Math.abs(t.gapPct) < gb.hi);
+    if (tt.length === 0) continue;
+    const w = tt.filter(t => t.outcome === "WIN").length;
+    const wr = (w / tt.length * 100).toFixed(1);
+    const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
+    const tr = tt.reduce((s, t) => s + t.rMultiple, 0).toFixed(2);
+    console.log(`  ${gb.label.padEnd(16)} ${String(tt.length).padEnd(8)} ${(wr + "%").padEnd(9)} ${(Number(ar) >= 0 ? "+" : "") + ar}R    ${(Number(tr) >= 0 ? "+" : "") + tr}R`);
+  }
+  console.log("");
+
+  // By range ATR %
+  console.log("BY RANGE SIZE (% of ATR)");
+  console.log("─".repeat(60));
+  console.log("  Range ATR%   Trades   Win%      Avg R     Total R");
+  const atrBuckets = [
+    { label: "<20%", lo: 0, hi: 20 },
+    { label: "20-35%", lo: 20, hi: 35 },
+    { label: "35-50%", lo: 35, hi: 50 },
+    { label: "50-75%", lo: 50, hi: 75 },
+  ];
+  for (const ab of atrBuckets) {
+    const tt = allTrades.filter(t => t.rangeAtrPct >= ab.lo && t.rangeAtrPct < ab.hi);
+    if (tt.length === 0) continue;
+    const w = tt.filter(t => t.outcome === "WIN").length;
+    const wr = (w / tt.length * 100).toFixed(1);
+    const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
+    const tr = tt.reduce((s, t) => s + t.rMultiple, 0).toFixed(2);
+    console.log(`  ${ab.label.padEnd(14)} ${String(tt.length).padEnd(8)} ${(wr + "%").padEnd(9)} ${(Number(ar) >= 0 ? "+" : "") + ar}R    ${(Number(tr) >= 0 ? "+" : "") + tr}R`);
+  }
+  console.log("");
+
+  // Direction × Ticker
+  console.log("BY DIRECTION × TICKER");
+  console.log("─".repeat(60));
+  console.log("  Combo          Trades   Win%      Avg R     Total R");
+  for (const tk of BT_TICKERS.map(t => BT_SHORT[t])) {
+    for (const dir of ["LONG", "SHORT"] as const) {
+      const tt = allTrades.filter(t => t.ticker === tk && t.direction === dir);
+      if (tt.length === 0) continue;
+      const w = tt.filter(t => t.outcome === "WIN").length;
+      const wr = (w / tt.length * 100).toFixed(1);
+      const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
+      const tr = tt.reduce((s, t) => s + t.rMultiple, 0).toFixed(2);
+      console.log(`  ${(tk + " " + dir).padEnd(16)} ${String(tt.length).padEnd(8)} ${(wr + "%").padEnd(9)} ${(Number(ar) >= 0 ? "+" : "") + ar}R    ${(Number(tr) >= 0 ? "+" : "") + tr}R`);
+    }
+  }
+  console.log("");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SWEEP
+// ═══════════════════════════════════════════════════════════════
+function runAllDays(
+  tradingDays: string[],
+  dailyByTicker: Map<string, AlpacaBar[]>,
+  dayBarsMap: Map<string, Map<string, AlpacaBar[]>>,
+  dailyDateIdx: Map<string, Map<string, number>>,
+): Trade[] {
+  const allTrades: Trade[] = [];
+  for (const date of tradingDays) {
+    const contexts: DayContext[] = [];
+    const dayIntraday = new Map<string, AlpacaBar[]>();
+    for (const ticker of BT_TICKERS) {
+      const short = BT_SHORT[ticker];
+      const dailyBars = dailyByTicker.get(ticker)!;
+      const dateIndex = dailyDateIdx.get(short)?.get(date);
+      if (dateIndex === undefined) continue;
+      const bars = dayBarsMap.get(short)?.get(date);
+      if (!bars || bars.length < 20) continue;
+      const openPrice = bars[0].o;
+      const ctx = computeContext(short, dailyBars, dateIndex, openPrice);
+      if (!ctx) continue;
+      contexts.push(ctx);
+      dayIntraday.set(short, bars);
+    }
+    if (contexts.length === 0) continue;
+    allTrades.push(...simulateDay(date, contexts, dayIntraday));
+  }
+  return allTrades;
+}
+
+function sweepMetrics(trades: Trade[]): { n: number; winRate: number; totalR: number; avgR: number; pf: number; maxDD: number } {
+  if (trades.length === 0) return { n: 0, winRate: 0, totalR: 0, avgR: 0, pf: 0, maxDD: 0 };
+  const W = trades.filter(t => t.outcome === "WIN");
+  const L = trades.filter(t => t.outcome === "LOSS");
+  const totalR = trades.reduce((s, t) => s + t.rMultiple, 0);
+  const avgR = totalR / trades.length;
+  const winRate = (W.length / trades.length) * 100;
+  const grossWin = W.reduce((s, t) => s + t.rMultiple, 0);
+  const grossLoss = Math.abs(L.reduce((s, t) => s + t.rMultiple, 0));
+  const pf = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0;
+  let peak = 0, maxDD = 0, cumR = 0;
+  const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date));
+  for (const t of sorted) { cumR += t.rMultiple; if (cumR > peak) peak = cumR; const dd = peak - cumR; if (dd > maxDD) maxDD = dd; }
+  return { n: trades.length, winRate, totalR, avgR, pf, maxDD };
+}
+
+function runSweep(
+  tradingDays: string[],
+  dailyByTicker: Map<string, AlpacaBar[]>,
+  dayBarsMap: Map<string, Map<string, AlpacaBar[]>>,
+  dailyDateIdx: Map<string, Map<string, number>>,
+) {
+  const savedDefaults = { ...DEFAULTS };
+
+  const configs: { name: string; overrides: Partial<typeof DEFAULTS>; filter?: (t: Trade) => boolean }[] = [
+    { name: "BASELINE", overrides: {} },
+    // Breakeven threshold
+    { name: "BE=off", overrides: { breakevenThresholdR: 0 } },
+    { name: "BE=0.15R", overrides: { breakevenThresholdR: 0.15 } },
+    { name: "BE=0.2R", overrides: { breakevenThresholdR: 0.2 } },
+    { name: "BE=0.25R", overrides: { breakevenThresholdR: 0.25 } },
+    { name: "BE=0.4R", overrides: { breakevenThresholdR: 0.4 } },
+    { name: "BE=0.5R", overrides: { breakevenThresholdR: 0.5 } },
+    // Score threshold
+    { name: "score≥6", overrides: { minCompositeScore: 6 } },
+    { name: "score≥7.5", overrides: { minCompositeScore: 7.5 } },
+    { name: "score≥8", overrides: { minCompositeScore: 8 } },
+    { name: "score≥8.5", overrides: { minCompositeScore: 8.5 } },
+    // Time cutoff
+    { name: "cutoff=60bars", overrides: { timeCutoffBars: 60 } },
+    { name: "cutoff=80bars", overrides: { timeCutoffBars: 80 } },
+    { name: "cutoff=100bars", overrides: { timeCutoffBars: 100 } },
+    // Selection delay
+    { name: "delay=1", overrides: { selectionDelayBars: 1 } },
+    { name: "delay=3", overrides: { selectionDelayBars: 3 } },
+    { name: "delay=4", overrides: { selectionDelayBars: 4 } },
+    { name: "delay=6", overrides: { selectionDelayBars: 6 } },
+    // Post-hoc filters (run baseline but filter results)
+    { name: "LONG only", overrides: {}, filter: t => t.direction === "LONG" },
+    { name: "SHORT only", overrides: {}, filter: t => t.direction === "SHORT" },
+    { name: "A+B only", overrides: {}, filter: t => t.grade === "A" || t.grade === "B" },
+    { name: "A only", overrides: {}, filter: t => t.grade === "A" },
+    { name: "gap<2%", overrides: {}, filter: t => Math.abs(t.gapPct) < 2 },
+    { name: "gap<3%", overrides: {}, filter: t => Math.abs(t.gapPct) < 3 },
+    { name: "early only(<60bar)", overrides: {}, filter: t => t.breakoutBar < 60 },
+    { name: "5m only", overrides: {}, filter: t => t.timeframe === 5 },
+    { name: "10m only", overrides: {}, filter: t => t.timeframe === 10 },
+    // Combos of best individual improvements (to be identified)
+    { name: "BE=0.2+score≥7.5", overrides: { breakevenThresholdR: 0.2, minCompositeScore: 7.5 } },
+    { name: "BE=0.25+score≥7.5", overrides: { breakevenThresholdR: 0.25, minCompositeScore: 7.5 } },
+    { name: "BE=0.2+cutoff=80", overrides: { breakevenThresholdR: 0.2, timeCutoffBars: 80 } },
+    { name: "BE=0.25+cutoff=80", overrides: { breakevenThresholdR: 0.25, timeCutoffBars: 80 } },
+    { name: "score≥7.5+cutoff=80", overrides: { minCompositeScore: 7.5, timeCutoffBars: 80 } },
+    { name: "BE=0.2+s≥7.5+c=80", overrides: { breakevenThresholdR: 0.2, minCompositeScore: 7.5, timeCutoffBars: 80 } },
+    { name: "BE=0.25+s≥7.5+c=80", overrides: { breakevenThresholdR: 0.25, minCompositeScore: 7.5, timeCutoffBars: 80 } },
+    // ── Round 2: combos of best individual winners ──
+    { name: "BE=0.15+delay=1", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 } },
+    { name: "BE=0.15+delay=1+noBTC", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 }, filter: t => t.ticker !== "BTC" },
+    { name: "BE=0.15+noBTC", overrides: { breakevenThresholdR: 0.15 }, filter: t => t.ticker !== "BTC" },
+    { name: "BE=0.15+LONG", overrides: { breakevenThresholdR: 0.15 }, filter: t => t.direction === "LONG" },
+    { name: "BE=0.15+10m", overrides: { breakevenThresholdR: 0.15 }, filter: t => t.timeframe === 10 },
+    { name: "BE=0.2+delay=1", overrides: { breakevenThresholdR: 0.2, selectionDelayBars: 1 } },
+    { name: "BE=0.2+noBTC", overrides: { breakevenThresholdR: 0.2 }, filter: t => t.ticker !== "BTC" },
+    { name: "delay=1+noBTC", overrides: { selectionDelayBars: 1 }, filter: t => t.ticker !== "BTC" },
+    { name: "noBTC", overrides: {}, filter: t => t.ticker !== "BTC" },
+    { name: "noTue", overrides: {}, filter: t => new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
+    { name: "BE=0.15+noTue", overrides: { breakevenThresholdR: 0.15 }, filter: t => new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
+    { name: "BE=0.15+d=1+noTue", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 }, filter: t => new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
+    { name: "BE=0.15+d=1+noBTC+noT", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 }, filter: t => t.ticker !== "BTC" && new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
+  ];
+
+  console.log("");
+  console.log("╔══════════════════════════════════════════════════════════════╗");
+  console.log("║                   PARAMETER SWEEP                           ║");
+  console.log("╚══════════════════════════════════════════════════════════════╝");
+  console.log("");
+  console.log("  " + "Config".padEnd(24) + "Trades  Win%    AvgR     TotalR   PF     MaxDD");
+  console.log("  " + "─".repeat(78));
+
+  for (const cfg of configs) {
+    // Reset + apply overrides
+    DEFAULTS = { ...savedDefaults, ...cfg.overrides };
+    let trades = runAllDays(tradingDays, dailyByTicker, dayBarsMap, dailyDateIdx);
+    if (cfg.filter) trades = trades.filter(cfg.filter);
+    const m = sweepMetrics(trades);
+    const row = `  ${cfg.name.padEnd(24)}${String(m.n).padEnd(8)}${(m.winRate.toFixed(1) + "%").padEnd(8)}${((m.avgR >= 0 ? "+" : "") + m.avgR.toFixed(2) + "R").padEnd(9)}${((m.totalR >= 0 ? "+" : "") + m.totalR.toFixed(2) + "R").padEnd(9)}${m.pf.toFixed(2).padEnd(7)}-${m.maxDD.toFixed(2)}R`;
+    // Highlight improvements
+    console.log(row);
+  }
+
+  // Restore
+  DEFAULTS = { ...savedDefaults };
+  console.log("");
+  console.log("  Baseline: BE=0.3R, score≥7, cutoff=120bars, delay=2");
+  console.log("");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -758,6 +998,9 @@ async function main() {
   console.log("");
 
   printReport(allTrades, tradingDays.length);
+
+  // Run parameter sweep
+  runSweep(tradingDays, dailyByTicker, dayBarsMap, dailyDateIdx);
 }
 
 main().catch(err => {
