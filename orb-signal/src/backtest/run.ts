@@ -9,9 +9,9 @@ import type { AlpacaBar, Grade, Direction } from "@/lib/types";
 // ═══════════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════════
-const BT_TICKERS = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD"];
+const BT_TICKERS = ["BTC/USD", "ETH/USD", "SOL/USD"];
 const BT_SHORT: Record<string, string> = {
-  "BTC/USD": "BTC", "ETH/USD": "ETH", "SOL/USD": "SOL", "XRP/USD": "XRP",
+  "BTC/USD": "BTC", "ETH/USD": "ETH", "SOL/USD": "SOL",
 };
 const TIMEFRAMES = [5, 10, 15] as const;
 const START_DATE = "2026-02-08";
@@ -443,7 +443,9 @@ function printReport(allTrades: Trade[], tradingDays: number) {
   console.log("");
   console.log("╔══════════════════════════════════════════════════════════════╗");
   console.log("║          ORB BACKTEST — Feb 8 to Jun 8, 2026                ║");
-  console.log("║          BTC · ETH · SOL · XRP  |  5/10/15 min             ║");
+  const tickerLabel = BT_TICKERS.map(t => BT_SHORT[t]).join(" · ");
+  const tfLabel = TIMEFRAMES.join("/") + " min";
+  console.log(`║          ${(tickerLabel + "  |  " + tfLabel).padEnd(48)}║`);
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log("");
 
@@ -466,7 +468,7 @@ function printReport(allTrades: Trade[], tradingDays: number) {
   console.log("BY TICKER");
   console.log("─".repeat(60));
   console.log("  Ticker   Trades   Win%      Avg R     Total R");
-  for (const tk of ["BTC", "ETH", "SOL", "XRP"]) {
+  for (const tk of BT_TICKERS.map(t => BT_SHORT[t])) {
     const tt = allTrades.filter(t => t.ticker === tk);
     if (tt.length === 0) { console.log(`  ${tk.padEnd(8)} 0`); continue; }
     const w = tt.filter(t => t.outcome === "WIN").length;
@@ -481,7 +483,7 @@ function printReport(allTrades: Trade[], tradingDays: number) {
   console.log("BY TIMEFRAME");
   console.log("─".repeat(60));
   console.log("  TF      Trades   Win%      Avg R     Total R");
-  for (const tf of [5, 10, 15]) {
+  for (const tf of TIMEFRAMES) {
     const tt = allTrades.filter(t => t.timeframe === tf);
     if (tt.length === 0) { console.log(`  ${tf}m`.padEnd(9) + " 0"); continue; }
     const w = tt.filter(t => t.outcome === "WIN").length;
