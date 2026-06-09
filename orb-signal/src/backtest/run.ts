@@ -13,7 +13,7 @@ const BT_TICKERS = ["BTC/USD", "ETH/USD", "SOL/USD"];
 const BT_SHORT: Record<string, string> = {
   "BTC/USD": "BTC", "ETH/USD": "ETH", "SOL/USD": "SOL",
 };
-const TIMEFRAMES = [5, 10, 15] as const;
+const TIMEFRAMES = [5, 10] as const;
 const START_DATE = "2026-02-08";
 const END_DATE = "2026-06-08";
 const CONTEXT_START = "2025-12-01"; // extra lookback for SMA20/ATR14
@@ -29,6 +29,11 @@ const DEFAULTS = {
   maxTradesPerDay: 3,
   secondTradeScoreGap: 2,
   selectionDelayBars: 2,
+  // ── Optimization params ──
+  failurePatience: 1,       // 1=instant exit on failure (patience >1 tested but caused stop-outs)
+  retestImmunityR: 999,     // disabled — immunity caused stop-outs in testing
+  minBreakoutVolume: 1.0,   // matches base breakout detector minimum
+  minCompositeScore: 7,     // filter weak signals — 6-7 range is dead zone in testing
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -298,6 +303,9 @@ function simulateDay(
       });
 
       if (bo) {
+        // Require stronger volume confirmation than base detector's 1.0x
+        if (bo.volumeRatio < DEFAULTS.minBreakoutVolume) { detected.add(key); continue; }
+
         const gapAligned = (bo.direction === "LONG" && ctx.gapDirection === "UP") ||
           (bo.direction === "SHORT" && ctx.gapDirection === "DOWN");
         const slopeDown = Math.abs(ctx.smaSlope) < DEFAULTS.smaDowngradeThreshold;
@@ -310,14 +318,19 @@ function simulateDay(
         });
 
         const stop = bo.direction === "LONG" ? rng.rangeLow : rng.rangeHigh;
-        const target = bo.direction === "LONG"
-          ? bo.entryPrice + rng.rangeWidth
-          : bo.entryPrice - rng.rangeWidth;
         const risk = bo.direction === "LONG"
           ? bo.entryPrice - rng.rangeLow
           : rng.rangeHigh - bo.entryPrice;
 
         if (risk <= 0) continue;
+
+        // Measured move target: range width from entry (classic ORB target)
+        const target = bo.direction === "LONG"
+          ? bo.entryPrice + rng.rangeWidth
+          : bo.entryPrice - rng.rangeWidth;
+
+        // Minimum composite score filter
+        if (cs.total < DEFAULTS.minCompositeScore) { detected.add(key); continue; }
 
         pending.push({
           ticker: rng.ticker, timeframe: rng.timeframe,
@@ -357,10 +370,18 @@ function simulateDay(
 
     let exitPrice = p.entryPrice;
     let exitType = "eod";
+    let consecutiveFailures = 0;
+    let bestReachedR = 0; // best unrealized R multiple
 
     for (let i = p.breakoutBar + 1; i < bars.length; i++) {
       const b = bars[i];
       closeHist.push(b.c);
+
+      // Track best unrealized move (for retest immunity)
+      const unrealized = p.direction === "LONG"
+        ? (b.h - p.entryPrice) / p.risk
+        : (p.entryPrice - b.l) / p.risk;
+      bestReachedR = Math.max(bestReachedR, unrealized);
 
       const ema9 = closeHist.length >= 9 ? calcEMA(closeHist, 9) : p.entryPrice;
       const trail = targetHit ? calcTrailingStop(p.direction, ema9) : null;
@@ -383,11 +404,29 @@ function simulateDay(
         if (ex.type === "target" && !targetHit) {
           targetHit = true;
           curStop = p.entryPrice; // move stop to breakeven
+          consecutiveFailures = 0;
           continue;
         }
+
+        // Failure patience: require consecutive failure bars before exiting
+        if (ex.type === "failure") {
+          // Retest immunity: if price already moved significantly in our favor,
+          // this is likely a retest, not a true failure
+          if (bestReachedR >= DEFAULTS.retestImmunityR) {
+            consecutiveFailures = 0;
+            continue;
+          }
+          consecutiveFailures++;
+          if (consecutiveFailures < DEFAULTS.failurePatience) continue;
+        } else {
+          consecutiveFailures = 0;
+        }
+
         exitPrice = ex.price;
         exitType = ex.type;
         break;
+      } else {
+        consecutiveFailures = 0;
       }
     }
 
@@ -517,6 +556,23 @@ function printReport(allTrades: Trade[], tradingDays: number) {
     if (tt.length === 0) continue;
     const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
     console.log(`  ${et.padEnd(10)} ${String(tt.length).padEnd(8)} ${(Number(ar) >= 0 ? "+" : "") + ar}R`);
+  }
+  console.log("");
+
+  // Composite score analysis
+  console.log("BY COMPOSITE SCORE");
+  console.log("─".repeat(60));
+  console.log("  Score    Trades   Win%      Avg R     Total R");
+  const scoreBuckets = [[5, 6], [6, 7], [7, 8], [8, 12]];
+  for (const [lo, hi] of scoreBuckets) {
+    const tt = allTrades.filter(t => t.score >= lo && t.score < hi);
+    if (tt.length === 0) continue;
+    const w = tt.filter(t => t.outcome === "WIN").length;
+    const wr = (w / tt.length * 100).toFixed(1);
+    const ar = (tt.reduce((s, t) => s + t.rMultiple, 0) / tt.length).toFixed(2);
+    const tr = tt.reduce((s, t) => s + t.rMultiple, 0).toFixed(2);
+    const label = hi === 12 ? `${lo}+` : `${lo}-${hi}`;
+    console.log(`  ${label.padEnd(9)} ${String(tt.length).padEnd(8)} ${(wr + "%").padEnd(9)} ${(Number(ar) >= 0 ? "+" : "") + ar}R    ${(Number(tr) >= 0 ? "+" : "") + tr}R`);
   }
   console.log("");
 
