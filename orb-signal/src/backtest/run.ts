@@ -34,6 +34,8 @@ let DEFAULTS = {
   breakevenThresholdR: 0.15, // move stop to entry after price reaches this R (0=off)
   minBreakoutVolume: 1.0,   // matches base breakout detector minimum
   minCompositeScore: 7,     // filter weak signals — 6-7 range is dead zone in testing
+  targetMultiplier: 1.0,    // target = rangeWidth × this (1.0 = full measured move)
+  earlyTrail: false,        // if true, use EMA9 trail from breakeven onward (not just after target)
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -327,10 +329,10 @@ function simulateDay(
 
         if (risk <= 0) continue;
 
-        // Measured move target: range width from entry (classic ORB target)
+        // Measured move target: range width × multiplier from entry
         const target = bo.direction === "LONG"
-          ? bo.entryPrice + rng.rangeWidth
-          : bo.entryPrice - rng.rangeWidth;
+          ? bo.entryPrice + rng.rangeWidth * DEFAULTS.targetMultiplier
+          : bo.entryPrice - rng.rangeWidth * DEFAULTS.targetMultiplier;
 
         // Minimum composite score filter
         if (cs.total < DEFAULTS.minCompositeScore) { detected.add(key); continue; }
@@ -388,11 +390,23 @@ function simulateDay(
 
       // Breakeven stop: once price reaches threshold R, tighten stop to entry
       // Unlike "immunity" (which kept trades open to die), this CLOSES them at 0R
-      if (!targetHit && DEFAULTS.breakevenThresholdR > 0 && bestReachedR >= DEFAULTS.breakevenThresholdR) {
+      const breakevenActive = !targetHit && DEFAULTS.breakevenThresholdR > 0 && bestReachedR >= DEFAULTS.breakevenThresholdR;
+      if (breakevenActive) {
         curStop = p.entryPrice;
       }
 
       const ema9 = closeHist.length >= 9 ? calcEMA(closeHist, 9) : p.entryPrice;
+
+      // Early trail: once breakeven activates, also use EMA9 as a tightening stop
+      // This extracts small profits from trades that reach 0.15R but don't hit target
+      if (DEFAULTS.earlyTrail && breakevenActive) {
+        if (p.direction === "LONG") {
+          curStop = Math.max(curStop, ema9);
+        } else {
+          curStop = Math.min(curStop, ema9);
+        }
+      }
+
       const trail = targetHit ? calcTrailingStop(p.direction, ema9) : null;
 
       const ex = checkExit({
@@ -842,20 +856,29 @@ function runSweep(
     { name: "score≥7.5+cutoff=80", overrides: { minCompositeScore: 7.5, timeCutoffBars: 80 } },
     { name: "BE=0.2+s≥7.5+c=80", overrides: { breakevenThresholdR: 0.2, minCompositeScore: 7.5, timeCutoffBars: 80 } },
     { name: "BE=0.25+s≥7.5+c=80", overrides: { breakevenThresholdR: 0.25, minCompositeScore: 7.5, timeCutoffBars: 80 } },
-    // ── Round 2: combos of best individual winners ──
-    { name: "BE=0.15+delay=1", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 } },
-    { name: "BE=0.15+delay=1+noBTC", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 }, filter: t => t.ticker !== "BTC" },
-    { name: "BE=0.15+noBTC", overrides: { breakevenThresholdR: 0.15 }, filter: t => t.ticker !== "BTC" },
-    { name: "BE=0.15+LONG", overrides: { breakevenThresholdR: 0.15 }, filter: t => t.direction === "LONG" },
-    { name: "BE=0.15+10m", overrides: { breakevenThresholdR: 0.15 }, filter: t => t.timeframe === 10 },
-    { name: "BE=0.2+delay=1", overrides: { breakevenThresholdR: 0.2, selectionDelayBars: 1 } },
-    { name: "BE=0.2+noBTC", overrides: { breakevenThresholdR: 0.2 }, filter: t => t.ticker !== "BTC" },
-    { name: "delay=1+noBTC", overrides: { selectionDelayBars: 1 }, filter: t => t.ticker !== "BTC" },
-    { name: "noBTC", overrides: {}, filter: t => t.ticker !== "BTC" },
-    { name: "noTue", overrides: {}, filter: t => new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
-    { name: "BE=0.15+noTue", overrides: { breakevenThresholdR: 0.15 }, filter: t => new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
-    { name: "BE=0.15+d=1+noTue", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 }, filter: t => new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
-    { name: "BE=0.15+d=1+noBTC+noT", overrides: { breakevenThresholdR: 0.15, selectionDelayBars: 1 }, filter: t => t.ticker !== "BTC" && new Date(t.date + "T12:00:00Z").getUTCDay() !== 2 },
+    // ── Round 3: structural changes ──
+    // Target multiplier (smaller target = hit sooner, trail the rest)
+    { name: "target=0.5x", overrides: { targetMultiplier: 0.5 } },
+    { name: "target=0.6x", overrides: { targetMultiplier: 0.6 } },
+    { name: "target=0.75x", overrides: { targetMultiplier: 0.75 } },
+    { name: "target=0.85x", overrides: { targetMultiplier: 0.85 } },
+    { name: "target=1.25x", overrides: { targetMultiplier: 1.25 } },
+    // Early trail (EMA9 trail from breakeven, not just after target)
+    { name: "earlyTrail", overrides: { earlyTrail: true } },
+    // Combos: smaller target + early trail
+    { name: "t=0.5x+eTrail", overrides: { targetMultiplier: 0.5, earlyTrail: true } },
+    { name: "t=0.6x+eTrail", overrides: { targetMultiplier: 0.6, earlyTrail: true } },
+    { name: "t=0.75x+eTrail", overrides: { targetMultiplier: 0.75, earlyTrail: true } },
+    // Early trail + higher breakeven (more room before trail kicks in)
+    { name: "eTrail+BE=0.2", overrides: { earlyTrail: true, breakevenThresholdR: 0.2 } },
+    { name: "eTrail+BE=0.25", overrides: { earlyTrail: true, breakevenThresholdR: 0.25 } },
+    { name: "eTrail+BE=0.3", overrides: { earlyTrail: true, breakevenThresholdR: 0.3 } },
+    // Target + breakeven combos
+    { name: "t=0.6+BE=0.2", overrides: { targetMultiplier: 0.6, breakevenThresholdR: 0.2 } },
+    { name: "t=0.75+BE=0.2", overrides: { targetMultiplier: 0.75, breakevenThresholdR: 0.2 } },
+    // Best combos
+    { name: "t=0.6+eT+BE=0.2", overrides: { targetMultiplier: 0.6, earlyTrail: true, breakevenThresholdR: 0.2 } },
+    { name: "t=0.75+eT+BE=0.2", overrides: { targetMultiplier: 0.75, earlyTrail: true, breakevenThresholdR: 0.2 } },
   ];
 
   console.log("");
