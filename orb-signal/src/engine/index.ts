@@ -7,7 +7,9 @@ console.log("[engine] ORB Signal Engine starting...");
 getDb();
 console.log("[engine] Database initialized");
 
-cron.schedule("0 13 * * 1-5", async () => {
+// 9:00 AM New York time. (Was "0 13" — i.e. 1:00 PM ET, a holdover from when the
+// schedule was written in UTC before the timezone option was added.)
+cron.schedule("0 9 * * 1-5", async () => {
   console.log("[engine] 9:00 AM ET — Starting daily session");
   const session = new SessionManager();
   await session.runSession();

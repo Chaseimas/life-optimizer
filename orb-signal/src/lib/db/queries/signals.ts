@@ -25,6 +25,7 @@ export function insertSignal(signal: {
   gap_aligned: number;
   trend_aligned: number;
   sma_slope: number;
+  slippage_r?: number | null;
 }): number {
   const db = getDb();
   const stmt = db.prepare(`
@@ -34,17 +35,17 @@ export function insertSignal(signal: {
       entry_price, stop_price, target_price, risk,
       signal_time, vwap_at_entry, breakout_volume_ratio, breakout_candle_quality,
       ranking_score, was_selected,
-      range_atr_pct, gap_pct, gap_aligned, trend_aligned, sma_slope
+      range_atr_pct, gap_pct, gap_aligned, trend_aligned, sma_slope, slippage_r
     ) VALUES (
       @ticker, @date, @timeframe, @direction, @grade,
       @range_high, @range_low, @range_width,
       @entry_price, @stop_price, @target_price, @risk,
       @signal_time, @vwap_at_entry, @breakout_volume_ratio, @breakout_candle_quality,
       @ranking_score, @was_selected,
-      @range_atr_pct, @gap_pct, @gap_aligned, @trend_aligned, @sma_slope
+      @range_atr_pct, @gap_pct, @gap_aligned, @trend_aligned, @sma_slope, @slippage_r
     )
   `);
-  const result = stmt.run(signal);
+  const result = stmt.run({ slippage_r: null, ...signal });
   return Number(result.lastInsertRowid);
 }
 

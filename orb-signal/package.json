@@ -8,9 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "engine": "tsx --env-file=.env.local src/engine/index.ts",
+    "engine:stocks": "tsx --env-file=.env.local src/engine-stocks/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "backtest": "tsx --env-file=.env.local src/backtest/run.ts"
+    "backtest": "tsx --env-file=.env.local src/backtest/run.ts",
+    "walkforward": "tsx --env-file=.env.local src/backtest/run-walkforward.ts",
+    "report:paper": "tsx --env-file=.env.local src/backtest/report-paper.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",

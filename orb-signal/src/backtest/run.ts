@@ -13,10 +13,10 @@ const BT_TICKERS = ["ETH/USD", "SOL/USD"];
 const BT_SHORT: Record<string, string> = {
   "ETH/USD": "ETH", "SOL/USD": "SOL",
 };
-const TIMEFRAMES = [5, 10] as const;
-const START_DATE = "2026-02-08";
-const END_DATE = "2026-06-08";
-const CONTEXT_START = "2025-12-01"; // extra lookback for SMA20/ATR14
+const TIMEFRAMES = [10] as const;
+const START_DATE = "2025-06-09";
+const END_DATE = "2026-06-09";
+const CONTEXT_START = "2025-04-01"; // extra lookback for SMA20/ATR14
 
 let DEFAULTS = {
   maxRangeAtrPct: 75,
@@ -36,6 +36,7 @@ let DEFAULTS = {
   minCompositeScore: 7,     // filter weak signals — 6-7 range is dead zone in testing
   targetMultiplier: 1.0,    // target = rangeWidth × this (1.0 = full measured move)
   earlyTrail: false,        // if true, use EMA9 trail from breakeven onward (not just after target)
+  dirFilter: null as null | Set<string>,  // null=all, or Set of "TICKER DIR" like "ETH LONG"
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -336,6 +337,11 @@ function simulateDay(
 
         // Minimum composite score filter
         if (cs.total < DEFAULTS.minCompositeScore) { detected.add(key); continue; }
+
+        // Direction × ticker filter
+        if (DEFAULTS.dirFilter && !DEFAULTS.dirFilter.has(`${rng.ticker} ${bo.direction}`)) {
+          detected.add(key); continue;
+        }
 
         pending.push({
           ticker: rng.ticker, timeframe: rng.timeframe,
@@ -807,6 +813,34 @@ function sweepMetrics(trades: Trade[]): { n: number; winRate: number; totalR: nu
   return { n: trades.length, winRate, totalR, avgR, pf, maxDD };
 }
 
+function compoundEquity(trades: Trade[], startCapital: number, riskPct: number): {
+  endEquity: number; maxDDPct: number; maxDDDollars: number; peakEquity: number; lowEquity: number;
+} {
+  const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date));
+  let equity = startCapital;
+  let peak = startCapital;
+  let maxDDPct = 0;
+  let maxDDDollars = 0;
+  let low = startCapital;
+  for (const t of sorted) {
+    const riskDollars = equity * riskPct;
+    const pnl = riskDollars * t.rMultiple;
+    equity += pnl;
+    if (equity > peak) peak = equity;
+    const ddPct = (peak - equity) / peak * 100;
+    const ddDollars = peak - equity;
+    if (ddPct > maxDDPct) maxDDPct = ddPct;
+    if (ddDollars > maxDDDollars) maxDDDollars = ddDollars;
+    if (equity < low) low = equity;
+  }
+  return { endEquity: equity, maxDDPct, maxDDDollars, peakEquity: peak, lowEquity: low };
+}
+
+function fmtMoney(n: number): string {
+  const sign = n >= 0 ? "+" : "-";
+  return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
 function runSweep(
   tradingDays: string[],
   dailyByTicker: Map<string, AlpacaBar[]>,
@@ -879,6 +913,19 @@ function runSweep(
     // Best combos
     { name: "t=0.6+eT+BE=0.2", overrides: { targetMultiplier: 0.6, earlyTrail: true, breakevenThresholdR: 0.2 } },
     { name: "t=0.75+eT+BE=0.2", overrides: { targetMultiplier: 0.75, earlyTrail: true, breakevenThresholdR: 0.2 } },
+    // ── Round 4: direction × ticker filter ──
+    { name: "ETH-L+SOL-S", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]) } },
+    { name: "ETH-L+SOL-S+t=0.85", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), targetMultiplier: 0.85 } },
+    { name: "ETH-L+SOL-S+t=0.75", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), targetMultiplier: 0.75 } },
+    { name: "ETH-L+SOL-S+c=100", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), timeCutoffBars: 100 } },
+    { name: "ETH-L+SOL-S+s≥7.5", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), minCompositeScore: 7.5 } },
+    { name: "t=0.85+c=100", overrides: { targetMultiplier: 0.85, timeCutoffBars: 100 } },
+    { name: "ELS+t=.85+c=100", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), targetMultiplier: 0.85, timeCutoffBars: 100 } },
+    { name: "ELS+t=.85+s≥7.5", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), targetMultiplier: 0.85, minCompositeScore: 7.5 } },
+    { name: "ELS+t=.85+c=100+s7.5", overrides: { dirFilter: new Set(["ETH LONG", "SOL SHORT"]), targetMultiplier: 0.85, timeCutoffBars: 100, minCompositeScore: 7.5 } },
+    // No-SOL-LONG only (keep ETH both + SOL short)
+    { name: "no SOL LONG", overrides: { dirFilter: new Set(["ETH LONG", "ETH SHORT", "SOL SHORT"]) } },
+    { name: "noSOL-L+t=0.85", overrides: { dirFilter: new Set(["ETH LONG", "ETH SHORT", "SOL SHORT"]), targetMultiplier: 0.85 } },
   ];
 
   console.log("");
@@ -886,24 +933,52 @@ function runSweep(
   console.log("║                   PARAMETER SWEEP                           ║");
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log("");
-  console.log("  " + "Config".padEnd(24) + "Trades  Win%    AvgR     TotalR   PF     MaxDD");
-  console.log("  " + "─".repeat(78));
+  console.log("  Starting capital: $100,000 | Risk per trade: 0.5% / 1% / 2%\n");
+  console.log("  " + "Config".padEnd(24) + "#".padEnd(5) + "W%".padEnd(6) + "TotalR".padEnd(9) + "PF".padEnd(7) + "0.5%risk".padEnd(10) + "1%risk".padEnd(10) + "2%risk");
+  console.log("  " + "─".repeat(82));
+
+  const START = 100_000;
+  const allSweepResults: { name: string; trades: Trade[]; totalR: number }[] = [];
 
   for (const cfg of configs) {
-    // Reset + apply overrides
     DEFAULTS = { ...savedDefaults, ...cfg.overrides };
     let trades = runAllDays(tradingDays, dailyByTicker, dayBarsMap, dailyDateIdx);
     if (cfg.filter) trades = trades.filter(cfg.filter);
     const m = sweepMetrics(trades);
-    const row = `  ${cfg.name.padEnd(24)}${String(m.n).padEnd(8)}${(m.winRate.toFixed(1) + "%").padEnd(8)}${((m.avgR >= 0 ? "+" : "") + m.avgR.toFixed(2) + "R").padEnd(9)}${((m.totalR >= 0 ? "+" : "") + m.totalR.toFixed(2) + "R").padEnd(9)}${m.pf.toFixed(2).padEnd(7)}-${m.maxDD.toFixed(2)}R`;
-    // Highlight improvements
+    const r05 = compoundEquity(trades, START, 0.005);
+    const r1  = compoundEquity(trades, START, 0.01);
+    const r2  = compoundEquity(trades, START, 0.02);
+    const row = `  ${cfg.name.padEnd(24)}${String(m.n).padEnd(5)}${(m.winRate.toFixed(0) + "%").padEnd(6)}${((m.totalR >= 0 ? "+" : "") + m.totalR.toFixed(2) + "R").padEnd(9)}${(m.pf.toFixed(1) + "x").padEnd(7)}${fmtMoney(r05.endEquity - START).padEnd(10)}${fmtMoney(r1.endEquity - START).padEnd(10)}${fmtMoney(r2.endEquity - START)}`;
     console.log(row);
+    allSweepResults.push({ name: cfg.name, trades, totalR: m.totalR });
   }
 
   // Restore
   DEFAULTS = { ...savedDefaults };
-  console.log("");
-  console.log("  Baseline: BE=0.3R, score≥7, cutoff=120bars, delay=2");
+  console.log("  " + "─".repeat(82));
+
+  // ─── Detailed dollar breakdown for top 5 ───
+  allSweepResults.sort((a, b) => b.totalR - a.totalR);
+
+  console.log("\n╔══════════════════════════════════════════════════════════════════════════════╗");
+  console.log("║          CRYPTO — DOLLAR P&L Top 5 ($100k, Compounded)                     ║");
+  console.log("╚══════════════════════════════════════════════════════════════════════════════╝");
+
+  const riskLevels = [
+    { label: "0.5% (conservative)", pct: 0.005 },
+    { label: "1% (standard)", pct: 0.01 },
+    { label: "2% (aggressive)", pct: 0.02 },
+  ];
+
+  for (const cr of allSweepResults.slice(0, 5)) {
+    console.log(`\n  ── ${cr.name} (${cr.trades.length} trades, ${cr.totalR >= 0 ? "+" : ""}${cr.totalR.toFixed(2)}R) ──`);
+    for (const rl of riskLevels) {
+      const eq = compoundEquity(cr.trades, START, rl.pct);
+      const pnl = eq.endEquity - START;
+      const retPct = (pnl / START) * 100;
+      console.log(`    ${rl.label.padEnd(22)} End: $${eq.endEquity.toLocaleString("en-US", { maximumFractionDigits: 0 }).padEnd(10)} P&L: ${fmtMoney(pnl).padEnd(10)} (${retPct >= 0 ? "+" : ""}${retPct.toFixed(1)}%)  Peak: $${eq.peakEquity.toLocaleString("en-US", { maximumFractionDigits: 0 })}  Low: $${eq.lowEquity.toLocaleString("en-US", { maximumFractionDigits: 0 })}  MaxDD: -$${eq.maxDDDollars.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
+    }
+  }
   console.log("");
 }
 

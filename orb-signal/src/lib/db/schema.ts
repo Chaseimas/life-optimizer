@@ -74,4 +74,7 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker);
     CREATE INDEX IF NOT EXISTS idx_ranges_date ON opening_ranges(date);
   `);
+
+  // Migrations for columns added after initial release
+  try { db.exec("ALTER TABLE signals ADD COLUMN slippage_r REAL"); } catch { /* exists */ }
 }
