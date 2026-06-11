@@ -226,10 +226,15 @@ export async function runStockSession(): Promise<void> {
         }
       }
 
-      // Nothing left to do today?
+      // Nothing left to do today? Trust the broker, not our bookkeeping —
+      // only stand down if Alpaca confirms the account is actually flat.
       if (nowMin > CFG.ENTRY_CUTOFF_MIN + 1 && active.every(t => t.closed)) {
-        console.log("[stocks] Entry window over, no open positions. Waiting for EOD summary.");
-        break;
+        const positions = await alpaca.getPositions();
+        if (positions.length === 0) {
+          console.log("[stocks] Entry window over, account flat at broker. Standing down.");
+          break;
+        }
+        console.log(`[stocks] Tracked trades closed but broker shows ${positions.length} position(s) — staying on watch until EOD.`);
       }
     } catch (err) {
       console.error("[stocks] Loop error:", err);
@@ -239,11 +244,14 @@ export async function runStockSession(): Promise<void> {
   }
 
   // ── EOD flatten ──
+  // Always sweep, even if our bookkeeping says flat — an untracked position must
+  // never survive the session (no-op when the account is already flat).
+  try { await alpaca.closeAllPositions(); } catch { /* sweep is best-effort */ }
+
   const open = active.filter(t => !t.closed);
   if (open.length > 0) {
     console.log(`[stocks] 3:55 PM — flattening ${open.length} open position(s)`);
     try {
-      await alpaca.closeAllPositions();
       await sleep(8000);
       const closedOrders = await alpaca.getClosedOrdersSince(sessionStartISO);
 
@@ -313,6 +321,23 @@ async function enterTrade(
     : signalPrice - CFG.TARGET_R * riskPerShareEst;
 
   try {
+    // Buying-power check: shorts consume ~1.5x margin, and a burst of simultaneous
+    // brackets can outrun the account (learned 2026-06-11: SOXL rejected, two orders
+    // queued unfilled). Size down to fit what's actually available.
+    try {
+      const acct = await alpaca.getAccount();
+      const bp = parseFloat(acct.buying_power);
+      const bpCapQty = Math.floor((bp / 1.6) / signalPrice);
+      if (bpCapQty < qty) {
+        console.log(`[stocks] ${st.ticker}: sized down ${qty} → ${bpCapQty} (buying power $${bp.toFixed(0)})`);
+        qty = bpCapQty;
+      }
+      if (qty < 1) {
+        console.log(`[stocks] ${st.ticker}: no buying power left. Skipped.`);
+        return null;
+      }
+    } catch { /* if the check fails, proceed with notional-capped qty */ }
+
     const order = await alpaca.submitBracket({
       symbol: st.ticker,
       side: dir === "LONG" ? "buy" : "sell",
@@ -328,9 +353,19 @@ async function enterTrade(
       filled = await alpaca.getOrder(order.id);
     }
     if (filled.status !== "filled" || !filled.filled_avg_price) {
-      console.error(`[stocks] ${st.ticker}: entry not filled (${filled.status})`);
-      await alerts.alertError(`${st.ticker} entry not filled: ${filled.status}`);
-      return null;
+      // CRITICAL: cancel the order — an abandoned order that fills later becomes an
+      // untracked position (happened 2026-06-11: TSLA and AMD filled after the engine
+      // gave up and traded unmanaged). Cancel, then re-check once for the fill race.
+      console.error(`[stocks] ${st.ticker}: entry not filled (${filled.status}) — canceling`);
+      await alpaca.cancelOrder(order.id);
+      await sleep(2000);
+      filled = await alpaca.getOrder(order.id);
+      if (filled.status !== "filled" || !filled.filled_avg_price) {
+        await alerts.alertError(`${st.ticker} entry not filled (${filled.status}) — canceled safely`);
+        return null;
+      }
+      // Lost the race — it filled anyway. Fall through and track it like a normal fill.
+      console.log(`[stocks] ${st.ticker}: filled during cancel race — tracking it`);
     }
 
     const fillPrice = parseFloat(filled.filled_avg_price);

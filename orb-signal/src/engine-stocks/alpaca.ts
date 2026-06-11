@@ -90,6 +90,10 @@ export async function getClosedOrdersSince(afterISO: string): Promise<AlpacaOrde
   return res.json();
 }
 
+export async function cancelOrder(id: string): Promise<void> {
+  await fetch(`${TRADING_URL}/v2/orders/${id}`, { method: "DELETE", headers: headers() });
+}
+
 export async function closeAllPositions(): Promise<void> {
   await fetch(`${TRADING_URL}/v2/positions?cancel_orders=true`, {
     method: "DELETE",

@@ -28,7 +28,9 @@ export const STOCKS_CONFIG = {
 
   // Risk
   RISK_PCT: 0.01,            // 1% of paper equity per trade (drop to 0.25-0.5% for live)
-  MAX_NOTIONAL_PCT: 0.8,     // per-position notional cap (4 concurrent × 0.8 = 3.2x < 4x day BP)
+  MAX_NOTIONAL_PCT: 0.45,    // per-position notional cap. 0.8 caused buying-power rejections
+                             // on 2026-06-11: shorts consume ~1.5x margin, so 4 × 0.8 brackets
+                             // exceeded 4x day BP. 4 × 0.45 × 1.5 = 2.7x — safe headroom.
   MAX_CONCURRENT: 4,         // max simultaneous positions
   DAILY_LOSS_LIMIT_R: 4,     // stop opening new trades after -4R day (safety brake)
 
