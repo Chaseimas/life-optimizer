@@ -1,0 +1,18 @@
+{
+  "name": "supra-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A70 MK3 Toyota Supra Turbo listing tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "setup": "node scripts/setup.js",
+    "scan": "node scripts/scan-once.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "cheerio": "^1.0.0",
+    "express": "^4.19.0"
+  }
+}
