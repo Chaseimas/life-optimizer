@@ -10,6 +10,14 @@ module.exports = {
   MIN_YEAR: 1986,
   MAX_YEAR: 1992,
   PREFERRED_YEAR: 1991,
+  // Donor-mode scoring (2JZ-swap build: chassis matters, engine doesn't)
+  DONOR: {
+    budgetMin: 1000,
+    budgetMax: 9000,
+    deadEngineCheapMax: 6000,  // dead engine at/below this = donor deal
+    deadEngineHighMin: 9000,   // dead engine above this = priced like a runner
+    dryStates: ['AZ', 'NM', 'NV', 'CA', 'TX', 'UT', 'CO'],
+  },
   // Craigslist regions scanned every 30 min (AZ + SoCal + NV + NM + UT + El Paso)
   SW_REGIONS: [
     'phoenix', 'tucson', 'flagstaff', 'mohave', 'prescott', 'showlow',
