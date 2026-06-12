@@ -1,0 +1,35 @@
+<!-- SYNTHETIC fixture: eBay 403-blocks non-browser clients, so a live fixture is
+     unobtainable. This documents the .s-item search-result contract the parser
+     targets (verified against eBay's public markup conventions). If eBay unblocks
+     and the layout differs, replace this with a live capture. -->
+<html><body>
+<ul class="srp-results">
+  <li class="s-item s-item__dsa-on-bottom">
+    <div class="s-item__wrapper">
+      <div class="s-item__image-section">
+        <a class="s-item__link" href="https://www.ebay.com/itm/256401234567?hash=item123"><div class="s-item__image-wrapper"><img src="https://i.ebayimg.com/images/g/abc/s-l225.jpg" alt=""></div></a>
+      </div>
+      <div class="s-item__info">
+        <a class="s-item__link" href="https://www.ebay.com/itm/256401234567?hash=item123"><div class="s-item__title"><span role="heading">1991 Toyota Supra Turbo 5-Speed Targa</span></div></a>
+        <div class="s-item__subtitle">7M-GTE, 89k miles, clean title</div>
+        <span class="s-item__price">$24,500.00</span>
+        <span class="s-item__location s-item__itemLocation">Located in Tempe, Arizona</span>
+        <span class="s-item__bids s-item__bidCount">12 bids</span>
+      </div>
+    </div>
+  </li>
+  <li class="s-item">
+    <div class="s-item__info">
+      <a class="s-item__link" href="https://www.ebay.com/itm/256409876543"><div class="s-item__title">1989 Toyota Supra non-turbo automatic</div></a>
+      <span class="s-item__price">$8,900.00</span>
+      <span class="s-item__location">from Reno, Nevada</span>
+    </div>
+  </li>
+  <li class="s-item">
+    <div class="s-item__info">
+      <a class="s-item__link" href="https://ebay.com/deals"><div class="s-item__title">Shop on eBay</div></a>
+      <span class="s-item__price">$20.00</span>
+    </div>
+  </li>
+</ul>
+</body></html>
