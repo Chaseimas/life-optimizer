@@ -51,3 +51,22 @@ test('GET /api/listings returns listings, sources, newSince; flag round-trips', 
   assert.equal(rb.status, 400);
   srv.close();
 });
+
+test('listings carry donor fields; /api/plan returns 9 phases', async () => {
+  const store = makeStore(createDb(':memory:'));
+  seed(store);
+  const app = makeApp(store);
+  const srv = app.listen(0);
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const body = await (await fetch(`${base}/api/listings`)).json();
+  const l = body.listings[0];
+  assert.ok(typeof l.donor_score === 'number');
+  assert.ok(['great', 'possible', 'poor'].includes(l.donor_tier));
+  assert.ok(Array.isArray(l.donor_reasons) && l.donor_reasons.length > 0);
+
+  const plan = await (await fetch(`${base}/api/plan`)).json();
+  assert.equal(plan.phases.length, 9);
+  assert.ok(plan.phases[0].name.toLowerCase().includes('buy'));
+  assert.equal(plan.finals.length, 3);
+  srv.close();
+});

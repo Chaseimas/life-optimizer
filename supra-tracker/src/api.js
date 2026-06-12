@@ -1,6 +1,8 @@
 const express = require('express');
 const config = require('./config');
 const { SOURCES } = require('./scrapers');
+const { scoreDonor } = require('./score');
+const buildPlan = require('./build-plan');
 
 const VISIT_GAP_MS = 30 * 60e3; // a "visit" = first page load after 30+ min away
 
@@ -37,7 +39,10 @@ function makeApp(store) {
     }
 
     res.json({
-      listings: store.queryListings(),
+      listings: store.queryListings().map((l) => {
+        const d = scoreDonor(l);
+        return { ...l, donor_score: d.score, donor_tier: d.tier, donor_reasons: d.reasons };
+      }),
       sources,
       newSince,
       home: config.HOME,
@@ -62,6 +67,8 @@ function makeApp(store) {
     store.setMeta(`checked:${req.params.key}`, Date.now());
     res.json({ ok: true });
   });
+
+  app.get('/api/plan', (_req, res) => res.json(buildPlan));
 
   return app;
 }
