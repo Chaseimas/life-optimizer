@@ -63,6 +63,8 @@ function createDb(file) {
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
+  // Migrations for dbs created before these columns existed (no-op when present)
+  try { db.exec('ALTER TABLE listings ADD COLUMN description TEXT'); } catch { /* exists */ }
   return db;
 }
 

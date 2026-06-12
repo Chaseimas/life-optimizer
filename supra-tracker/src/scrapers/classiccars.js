@@ -46,6 +46,7 @@ function parseSearchHtml(html) {
       region: null,
       photoUrl: it.image && it.image.url ? it.image.url : null,
       snippet: String(it.description || '').slice(0, 300),
+      description: String(it.description || '').slice(0, 4000),
       year: it.modelDate ? parseInt(it.modelDate, 10) : null,
       isAuction: false,
     });

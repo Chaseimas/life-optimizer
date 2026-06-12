@@ -43,6 +43,7 @@ function parseSearchHtml(html) {
           region: null,
           photoUrl: typeof it.image === 'string' ? it.image : (Array.isArray(it.image) ? it.image[0] : (it.image && it.image.url) || null),
           snippet: String(it.description || '').slice(0, 300),
+          description: String(it.description || '').slice(0, 4000),
           year: it.vehicleModelDate || it.modelDate ? parseInt(it.vehicleModelDate || it.modelDate, 10) : null,
           isAuction: false,
         });

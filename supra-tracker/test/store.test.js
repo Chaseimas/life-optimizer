@@ -67,6 +67,30 @@ test('ingest survives non-string field types from sloppy site JSON', () => {
   assert.equal(l.price, 8500);
 });
 
+test('ingest stores description when the scraper provides one; setDescription updates turbo', () => {
+  const store = makeStore(createDb(':memory:'));
+  store.ingestScan('classiccars', [cand({
+    source: 'classiccars', sourceListingId: 'cc1',
+    description: 'Body is rust free. This is the non turbo model.',
+    title: '1988 Toyota Supra',
+  })], null);
+  let l = store.allListings()[0];
+  assert.match(l.description, /rust free/);
+
+  // enrichment path: description arrives later and upgrades turbo_status
+  store.ingestScan('craigslist', [cand({ sourceListingId: 'cl1', title: '1990 Toyota Supra clean' })], ['phoenix']);
+  l = store.allListings().find((x) => x.source_listing_id === 'cl1');
+  assert.equal(l.turbo_status, 'unconfirmed');
+  store.setDescription(l.id, 'Original 7M-GTE turbo runs strong, rust free underneath');
+  l = store.allListings().find((x) => x.source_listing_id === 'cl1');
+  assert.match(l.description, /7M-GTE/i);
+  assert.equal(l.turbo_status, 'confirmed');
+
+  // failure sentinel: empty string stored, turbo untouched
+  store.setDescription(l.id, '');
+  assert.equal(store.allListings().find((x) => x.source_listing_id === 'cl1').description, '');
+});
+
 test('meta get/set and scan log', () => {
   const store = makeStore(createDb(':memory:'));
   store.setMeta('k', 'v');

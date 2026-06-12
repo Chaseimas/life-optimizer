@@ -13,3 +13,9 @@ test('schema: inserts and unique constraint work', () => {
   const n = db.prepare('SELECT COUNT(*) c FROM listings').get().c;
   assert.equal(n, 2);
 });
+
+test('migration: description column exists even on a db created without it', () => {
+  const db = createDb(':memory:');
+  const cols = db.prepare('PRAGMA table_info(listings)').all().map((c) => c.name);
+  assert.ok(cols.includes('description'));
+});

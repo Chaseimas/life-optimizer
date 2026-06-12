@@ -1,4 +1,4 @@
-const { evaluateCandidate } = require('./match');
+const { evaluateCandidate, classifyTurbo } = require('./match');
 const { distanceFromHome, geocode } = require('./geo');
 
 // Site JSON is sloppy; coerce to bindable types so one odd field never kills a scan.
@@ -12,10 +12,10 @@ const num = (v) => {
 function makeStore(db) {
   const insL = db.prepare(`INSERT INTO listings
     (source, source_listing_id, url, title, year, price, city, state, region,
-     lat, lon, distance_mi, photo_url, snippet, turbo_status, is_auction,
+     lat, lon, distance_mi, photo_url, snippet, description, turbo_status, is_auction,
      first_seen, last_seen)
     VALUES (@source, @sourceListingId, @url, @title, @year, @price, @city, @state, @region,
-     @lat, @lon, @distanceMi, @photoUrl, @snippet, @turboStatus, @isAuction,
+     @lat, @lon, @distanceMi, @photoUrl, @snippet, @description, @turboStatus, @isAuction,
      @now, @now)`);
   const getL = db.prepare('SELECT * FROM listings WHERE source = ? AND source_listing_id = ?');
   const updSeen = db.prepare(`UPDATE listings SET last_seen=@now, miss_count=0, status='active',
@@ -41,6 +41,7 @@ function makeStore(db) {
           region: str(raw.region),
           photoUrl: str(raw.photoUrl),
           snippet: str(raw.snippet) || '',
+          description: str(raw.description),
         };
         if (!c.sourceListingId || !c.url) { stats.rejected++; continue; }
         const ev = evaluateCandidate(c);
@@ -55,7 +56,7 @@ function makeStore(db) {
             city: c.city, state: c.state, region: c.region,
             lat: pos ? pos.lat : null, lon: pos ? pos.lon : null,
             distanceMi: distanceFromHome(c.city, c.state),
-            photoUrl: c.photoUrl, snippet: c.snippet,
+            photoUrl: c.photoUrl, snippet: c.snippet, description: c.description,
             turboStatus: ev.turboStatus, isAuction: c.isAuction ? 1 : 0, now,
           });
           const row = getL.get(source, c.sourceListingId);
@@ -98,6 +99,19 @@ function makeStore(db) {
     ingestScan,
     allListings: () => db.prepare('SELECT * FROM listings').all(),
     priceHistory: (id) => db.prepare('SELECT * FROM price_history WHERE listing_id=? ORDER BY seen_at').all(id),
+    setDescription: (id, desc) => {
+      const text = String(desc ?? '');
+      db.prepare('UPDATE listings SET description=? WHERE id=?').run(text, id);
+      if (text) {
+        const row = db.prepare('SELECT title FROM listings WHERE id=?').get(id);
+        if (row) db.prepare('UPDATE listings SET turbo_status=? WHERE id=?')
+          .run(classifyTurbo(`${row.title} ${text}`), id);
+      }
+    },
+    listNeedingDescription: (limit) => db.prepare(`
+      SELECT id, source, url, title FROM listings
+      WHERE description IS NULL AND source IN ('craigslist','offerup') AND status='active'
+      ORDER BY first_seen DESC LIMIT ?`).all(limit),
     setFlag: (id, field, val) => {
       if (!['favorite', 'hidden'].includes(field)) throw new Error('bad flag');
       db.prepare(`UPDATE listings SET ${field}=? WHERE id=?`).run(val ? 1 : 0, id);
