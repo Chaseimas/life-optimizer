@@ -20,6 +20,7 @@ function makeStore(db) {
   const getL = db.prepare('SELECT * FROM listings WHERE source = ? AND source_listing_id = ?');
   const updSeen = db.prepare(`UPDATE listings SET last_seen=@now, miss_count=0, status='active',
      title=@title, price=@price, photo_url=COALESCE(@photoUrl, photo_url),
+     description=COALESCE(@description, description),
      turbo_status=@turboStatus, year=COALESCE(@year, year) WHERE id=@id`);
   const insPrice = db.prepare('INSERT INTO price_history (listing_id, price, seen_at) VALUES (?, ?, ?)');
 
@@ -69,7 +70,8 @@ function makeStore(db) {
           }
           updSeen.run({
             now, id: existing.id, title: c.title, price: c.price,
-            photoUrl: c.photoUrl, turboStatus: ev.turboStatus, year: ev.year,
+            photoUrl: c.photoUrl, description: c.description,
+            turboStatus: ev.turboStatus, year: ev.year,
           });
           stats.updated++;
         }

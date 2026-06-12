@@ -1,4 +1,5 @@
 const { SOURCES } = require('./scrapers');
+const { enrichBatch } = require('./enrich');
 
 // Breaker: after 3+ consecutive failures, required gap = cadence * 2^(fails-2), capped 24h.
 function shouldSkip(entry, store, now = Date.now()) {
@@ -20,6 +21,9 @@ async function runEntry(entry, store) {
       found: candidates.length, error: null });
     store.setMeta(`blockedCount:${entry.source}`, '0');
     console.log(`[scan] ${entry.key}: ${candidates.length} found, +${stats.added} new, ${stats.priceChanges} price changes, ${stats.rejected} rejected`);
+    if (entry.source === 'craigslist' || entry.source === 'offerup') {
+      await enrichBatch(store).catch((e) => console.warn(`[enrich] ${e.message}`));
+    }
     return stats;
   } catch (e) {
     store.logScan({ source: entry.source, startedAt, finishedAt: Date.now(), ok: false,

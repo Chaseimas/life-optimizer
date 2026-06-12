@@ -89,6 +89,19 @@ test('ingest stores description when the scraper provides one; setDescription up
   // failure sentinel: empty string stored, turbo untouched
   store.setDescription(l.id, '');
   assert.equal(store.allListings().find((x) => x.source_listing_id === 'cl1').description, '');
+
+  // re-scan of an EXISTING row backfills description (rows from before the column existed)
+  store.ingestScan('classiccars', [cand({
+    source: 'classiccars', sourceListingId: 'cc-old', title: '1989 Toyota Supra', description: null,
+  })], null);
+  let old = store.allListings().find((x) => x.source_listing_id === 'cc-old');
+  assert.equal(old.description, null);
+  store.ingestScan('classiccars', [cand({
+    source: 'classiccars', sourceListingId: 'cc-old', title: '1989 Toyota Supra',
+    description: 'now with full rust free description',
+  })], null);
+  old = store.allListings().find((x) => x.source_listing_id === 'cc-old');
+  assert.match(old.description, /rust free/);
 });
 
 test('meta get/set and scan log', () => {

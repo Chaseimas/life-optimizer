@@ -7,6 +7,7 @@ const { makeStore } = require('../src/store');
 const { loadGeo } = require('../src/geo');
 const { SOURCES } = require('../src/scrapers');
 const { runEntry } = require('../src/scheduler');
+const { enrichBatch } = require('../src/enrich');
 
 (async () => {
   loadGeo();
@@ -18,6 +19,8 @@ const { runEntry } = require('../src/scheduler');
     process.exit(1);
   }
   for (const e of entries) await runEntry(e, store);
+  const enriched = await enrichBatch(store, 25);
+  if (enriched) console.log(`enriched ${enriched} listings with full ad text`);
   const all = store.allListings();
   console.log(`done. ${all.length} total listings in db (${all.filter((l) => l.status === 'active').length} active).`);
 })();
