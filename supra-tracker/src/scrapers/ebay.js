@@ -1,5 +1,6 @@
 const cheerio = require('cheerio');
 const { politeFetch } = require('../http');
+const { STATES } = require('./us-states');
 
 // eBay 403-blocks non-browser TLS fingerprints (verified 2026-06), so this source
 // is registered demotable: it keeps attempting politely and the scheduler demotes
@@ -7,19 +8,6 @@ const { politeFetch } = require('../http');
 const SEARCH_URL =
   'https://www.ebay.com/sch/i.html?_nkw=toyota+supra&_sacat=6001&_ipg=60';
 const MANUAL_URL = SEARCH_URL.replace('&_ipg=60', '');
-
-const STATES = {
-  alabama:'AL',alaska:'AK',arizona:'AZ',arkansas:'AR',california:'CA',colorado:'CO',
-  connecticut:'CT',delaware:'DE',florida:'FL',georgia:'GA',hawaii:'HI',idaho:'ID',
-  illinois:'IL',indiana:'IN',iowa:'IA',kansas:'KS',kentucky:'KY',louisiana:'LA',
-  maine:'ME',maryland:'MD',massachusetts:'MA',michigan:'MI',minnesota:'MN',
-  mississippi:'MS',missouri:'MO',montana:'MT',nebraska:'NE',nevada:'NV',
-  'new hampshire':'NH','new jersey':'NJ','new mexico':'NM','new york':'NY',
-  'north carolina':'NC','north dakota':'ND',ohio:'OH',oklahoma:'OK',oregon:'OR',
-  pennsylvania:'PA','rhode island':'RI','south carolina':'SC','south dakota':'SD',
-  tennessee:'TN',texas:'TX',utah:'UT',vermont:'VT',virginia:'VA',washington:'WA',
-  'west virginia':'WV',wisconsin:'WI',wyoming:'WY',
-};
 
 function parseLocation(text) {
   // "from Tempe, Arizona" / "Located in Tempe, Arizona" -> { city, state }
