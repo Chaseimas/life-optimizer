@@ -45,6 +45,10 @@ function evaluateCandidate(c) {
   const text = `${c.title || ''} ${c.snippet || ''}`;
   const year = c.year || extractYear(text);
   const turboStatus = classifyTurbo(text);
+  // Site search is fuzzy (a "toyota supra" query returns Venzas and Camrys too)
+  if (!/supra/i.test(text)) {
+    return { accept: false, year, turboStatus, reason: 'not a supra' };
+  }
   if (year !== null && year !== undefined) {
     if (year < MIN_YEAR || year > MAX_YEAR) {
       return { accept: false, year, turboStatus, reason: `year ${year} outside ${MIN_YEAR}-${MAX_YEAR}` };

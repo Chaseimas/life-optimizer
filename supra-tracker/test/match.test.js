@@ -51,3 +51,11 @@ test('evaluateCandidate: accepts in-range, rejects MK4/MK2, keeps keyword-tagged
   // structured year from site wins over text
   assert.equal(evaluateCandidate({ ...base, year: 1990, title: 'Toyota Supra' }).accept, true);
 });
+
+test('evaluateCandidate: rejects non-Supra vehicles even with in-range years', () => {
+  // search engines fuzzy-match; a "toyota supra" query returns Camrys and Venzas too
+  const base = { title: '', snippet: '', year: null };
+  assert.equal(evaluateCandidate({ ...base, title: '1990 Toyota Camry excellent' }).accept, false);
+  assert.equal(evaluateCandidate({ ...base, year: 1991, title: '2015 Toyota Venza - Cash!' }).accept, false);
+  assert.equal(evaluateCandidate({ ...base, title: '1991 Celica Supra' }).accept, true);
+});
