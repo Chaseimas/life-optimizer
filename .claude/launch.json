@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "polysignal",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "cwd": "polysignal"
+    },
+    {
+      "name": "supra-tracker",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 3070,
+      "cwd": "supra-tracker"
+    }
+  ]
+}

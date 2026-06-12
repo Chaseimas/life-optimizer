@@ -24,6 +24,7 @@ async function load() {
 }
 
 function visible() {
+  const donorMode = $('#f-donor').checked;
   const fPrice = parseInt($('#f-price').value, 10) || null;
   const fDist = parseInt($('#f-dist').value, 10) || null;
   const fYear = $('#f-year').value;
@@ -42,14 +43,17 @@ function visible() {
     if (fDist && (l.distance_mi == null || l.distance_mi > fDist)) return false;
     if (fYear === 'unknown' && l.year != null) return false;
     if (fYear && fYear !== 'unknown' && l.year !== parseInt(fYear, 10)) return false;
-    if (fTurbo === 'default' && l.turbo_status === 'non_turbo') return false;
-    if (fTurbo === 'confirmed' && l.turbo_status !== 'confirmed') return false;
+    if (!donorMode) {
+      if (fTurbo === 'default' && l.turbo_status === 'non_turbo') return false;
+      if (fTurbo === 'confirmed' && l.turbo_status !== 'confirmed') return false;
+    }
     return true;
   });
 
   const sort = $('#f-sort').value;
   if (sort === 'price') rows.sort((a, b) => (a.price ?? 9e9) - (b.price ?? 9e9));
   else if (sort === 'distance') rows.sort((a, b) => (a.distance_mi ?? 9e9) - (b.distance_mi ?? 9e9));
+  else if (sort === 'donor' || (donorMode && sort === 'newest')) rows.sort((a, b) => b.donor_score - a.donor_score);
   else rows.sort((a, b) => b.first_seen - a.first_seen);
   return rows;
 }
@@ -59,7 +63,17 @@ function cardHtml(l) {
   const drop = l.prev_price != null && l.price != null && l.price < l.prev_price;
   const rise = l.prev_price != null && l.price != null && l.price > l.prev_price;
   const src = DATA.sources.find((s) => s.source === l.source);
+  const donorMode = $('#f-donor').checked;
+  const tierColor = { great: 'var(--green)', possible: 'var(--accent)', poor: 'var(--red)' }[l.donor_tier];
+  const donorChip = donorMode
+    ? `<span class="badge donor" style="border-color:${tierColor};color:${tierColor}">🔧 ${l.donor_score}</span>`
+    : '';
+  const donorReasons = donorMode
+    ? `<div class="meta reasons">${l.donor_reasons.slice(0, 3).map((r) =>
+        `<span>${r.delta > 0 ? '+' : ''}${r.delta} ${esc(r.text)}</span>`).join('<br>')}</div>`
+    : '';
   const badges = [
+    donorChip,
     isNew ? '<span class="badge new">NEW</span>' : '',
     l.year === 1991 ? '<span class="badge star">⭐ 1991</span>' : '',
     l.status === 'gone' ? '<span class="badge gone">GONE</span>' : '',
@@ -87,6 +101,7 @@ function cardHtml(l) {
       </div>
       <div class="meta">${esc(where)} · ${dist}</div>
       <div class="meta">found ${ago(l.first_seen)}</div>
+      ${donorReasons}
       <div class="actions">
         <button class="${l.favorite ? 'on' : ''}" onclick="flag(${l.id},'favorite',${l.favorite ? 0 : 1})">❤️</button>
         <button class="${l.hidden ? 'on' : ''}" onclick="flag(${l.id},'hidden',${l.hidden ? 0 : 1})">🚫</button>
@@ -96,6 +111,7 @@ function cardHtml(l) {
 }
 
 function render() {
+  $('#f-turbo').disabled = $('#f-donor').checked;
   const rows = visible();
   const active = DATA.listings.filter((l) => l.status === 'active' && !l.hidden);
   const fresh = active.filter((l) => l.first_seen > DATA.newSince);

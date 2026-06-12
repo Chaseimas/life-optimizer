@@ -63,4 +63,10 @@ main { display: grid; grid-template-columns: 1fr 310px; gap: 0; }
   border-bottom: 1px dashed var(--line); gap: 8px; }
 .src .ok { color: var(--green); } .src .err { color: var(--red); } .src .demoted { color: var(--dim); }
 .empty { color: var(--dim); padding: 40px; text-align: center; grid-column: 1/-1; }
+.planlink { color: var(--new); text-decoration: none; }
+.planlink:hover { color: var(--accent); }
+.badge.donor { font-weight: 700; }
+.reasons span { display: inline; }
+#filters label.donor { color: var(--accent); font-weight: 600; }
+#filters select:disabled { opacity: 0.4; }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } #side { border-left: 0; min-height: 0; } }
