@@ -1,6 +1,13 @@
 const { evaluateCandidate } = require('./match');
 const { distanceFromHome, geocode } = require('./geo');
 
+// Site JSON is sloppy; coerce to bindable types so one odd field never kills a scan.
+const str = (v) => (typeof v === 'string' && v ? v : typeof v === 'number' ? String(v) : null);
+const num = (v) => {
+  const n = typeof v === 'string' ? parseFloat(v.replace(/[^0-9.\-]/g, '')) : v;
+  return typeof n === 'number' && isFinite(n) ? Math.round(n) : null;
+};
+
 // makeStore(db) so tests can inject :memory:; server uses getDb().
 function makeStore(db) {
   const insL = db.prepare(`INSERT INTO listings
@@ -22,33 +29,46 @@ function makeStore(db) {
     const seenIds = new Set();
 
     const tx = db.transaction(() => {
-      for (const c of candidates) {
+      for (const raw of candidates) {
+        const c = {
+          ...raw,
+          sourceListingId: str(raw.sourceListingId),
+          url: str(raw.url),
+          title: str(raw.title) || '',
+          price: num(raw.price),
+          city: str(raw.city),
+          state: str(raw.state),
+          region: str(raw.region),
+          photoUrl: str(raw.photoUrl),
+          snippet: str(raw.snippet) || '',
+        };
+        if (!c.sourceListingId || !c.url) { stats.rejected++; continue; }
         const ev = evaluateCandidate(c);
         if (!ev.accept) { stats.rejected++; continue; }
-        seenIds.add(String(c.sourceListingId));
-        const existing = getL.get(source, String(c.sourceListingId));
+        seenIds.add(c.sourceListingId);
+        const existing = getL.get(source, c.sourceListingId);
         if (!existing) {
           const pos = geocode(c.city, c.state);
           insL.run({
-            source, sourceListingId: String(c.sourceListingId), url: c.url,
-            title: c.title, year: ev.year, price: c.price ?? null,
-            city: c.city || null, state: c.state || null, region: c.region || null,
+            source, sourceListingId: c.sourceListingId, url: c.url,
+            title: c.title, year: ev.year, price: c.price,
+            city: c.city, state: c.state, region: c.region,
             lat: pos ? pos.lat : null, lon: pos ? pos.lon : null,
             distanceMi: distanceFromHome(c.city, c.state),
-            photoUrl: c.photoUrl || null, snippet: c.snippet || '',
+            photoUrl: c.photoUrl, snippet: c.snippet,
             turboStatus: ev.turboStatus, isAuction: c.isAuction ? 1 : 0, now,
           });
-          const row = getL.get(source, String(c.sourceListingId));
-          insPrice.run(row.id, c.price ?? null, now);
+          const row = getL.get(source, c.sourceListingId);
+          insPrice.run(row.id, c.price, now);
           stats.added++;
         } else {
-          if ((c.price ?? null) !== existing.price) {
-            insPrice.run(existing.id, c.price ?? null, now);
+          if (c.price !== existing.price) {
+            insPrice.run(existing.id, c.price, now);
             stats.priceChanges++;
           }
           updSeen.run({
-            now, id: existing.id, title: c.title, price: c.price ?? null,
-            photoUrl: c.photoUrl || null, turboStatus: ev.turboStatus, year: ev.year,
+            now, id: existing.id, title: c.title, price: c.price,
+            photoUrl: c.photoUrl, turboStatus: ev.turboStatus, year: ev.year,
           });
           stats.updated++;
         }

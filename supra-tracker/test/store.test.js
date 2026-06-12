@@ -52,6 +52,21 @@ test('gone detection: 2 consecutive misses within covered regions only', () => {
   assert.equal(store.allListings().find((l) => l.source_listing_id === 'a1').status, 'active');
 });
 
+test('ingest survives non-string field types from sloppy site JSON', () => {
+  const store = makeStore(createDb(':memory:'));
+  const stats = store.ingestScan('offerup', [cand({
+    source: 'offerup',
+    sourceListingId: 12345,                       // number id
+    photoUrl: { url: 'https://img/x.jpg' },       // object instead of string
+    price: '8500',                                // string price
+    title: '1990 Toyota Supra Turbo',
+  })], null);
+  assert.equal(stats.added, 1);
+  const l = store.allListings()[0];
+  assert.equal(l.photo_url, null);                // unusable -> stored as null
+  assert.equal(l.price, 8500);
+});
+
 test('meta get/set and scan log', () => {
   const store = makeStore(createDb(':memory:'));
   store.setMeta('k', 'v');

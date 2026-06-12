@@ -18,5 +18,6 @@ test('politeFetch: sends browser UA and throttles same-host requests', async () 
   await politeFetch(url);
   srv.close();
   assert.match(uas[0], /Mozilla/);
-  assert.ok(times[1] - times[0] >= 280, `gap was ${times[1] - times[0]}ms`);
+  // generous margin: Windows timers can fire a few ms early
+  assert.ok(times[1] - times[0] >= 250, `gap was ${times[1] - times[0]}ms`);
 });
