@@ -100,7 +100,7 @@ After each scan cycle, for up to **10** listings per cycle where `description IS
 
 ## Testing
 
-- `score.js`: unit tests per rule group — budget bands, structural vs cosmetic vs generic rust precedence, positive+structural combination ("no rust except rockers" nets both), donor-deal price gates, caps, clamping, tier mapping.
+- `score.js`: unit tests per rule group — budget bands, structural vs cosmetic vs generic rust precedence (positive phrases like "no rust"/"no rot" are stripped before negative checks so they can't double-count as rust mentions), donor-deal price gates, caps, clamping, tier mapping.
 - `enrich.js`: parser tests against fixtures — live-captured CL posting page and OfferUp item page; failure → `''` sentinel; turbo_status upgrade from body text.
 - `db.js`: migration test — db created with old schema gets `description` column on reopen.
 - API test: listings response includes `donor_score`/`donor_tier`/`donor_reasons`; `/api/plan` returns 9 phases.
