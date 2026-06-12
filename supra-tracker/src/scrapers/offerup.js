@@ -37,7 +37,8 @@ function parseNextData(html) {
         city: locName ? locName.split(',')[0].trim() : null,
         state: /,\s*([A-Z]{2})\b/.test(locName) ? locName.match(/,\s*([A-Z]{2})\b/)[1] : null,
         region: null,
-        photoUrl: node.image || (node.photos && node.photos[0] && node.photos[0].detail && node.photos[0].detail.url) || null,
+        photoUrl: (node.image && typeof node.image === 'object' ? node.image.url : node.image)
+          || (node.photos && node.photos[0] && node.photos[0].detail && node.photos[0].detail.url) || null,
         snippet: '',
         year: null,
         isAuction: false,

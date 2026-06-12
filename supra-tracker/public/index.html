@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supra Tracker — A70 Hunt</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🏁 Supra Tracker <span class="sub">A70 Turbo hunt · home base Mesa, AZ</span></h1>
+  <div id="counts"></div>
+</header>
+
+<nav id="filters">
+  <label>Max price <input type="number" id="f-price" placeholder="any" step="500"></label>
+  <label>Max miles <input type="number" id="f-dist" placeholder="any" step="50"></label>
+  <label>Year <select id="f-year">
+    <option value="">all 86–92</option>
+    <option>1986</option><option>1987</option><option>1988</option>
+    <option>1989</option><option>1990</option><option>1991</option><option>1992</option>
+    <option value="unknown">year unknown</option>
+  </select></label>
+  <label>Turbo <select id="f-turbo">
+    <option value="default">turbo + unsure</option>
+    <option value="confirmed">confirmed only</option>
+    <option value="all">show everything</option>
+  </select></label>
+  <label>Source <select id="f-source"><option value="">all</option></select></label>
+  <label>Sort <select id="f-sort">
+    <option value="newest">newest</option>
+    <option value="price">cheapest</option>
+    <option value="distance">closest</option>
+  </select></label>
+  <label class="chk"><input type="checkbox" id="f-gone"> show sold/gone</label>
+  <label class="chk"><input type="checkbox" id="f-fav"> ❤️ only</label>
+  <label class="chk"><input type="checkbox" id="f-hidden"> show hidden</label>
+</nav>
+
+<main>
+  <section id="cards"></section>
+  <aside id="side">
+    <h2>Check these yourself</h2>
+    <p class="note">These sites block robots — tap to search them, then mark checked.
+      <a href="fb-guide.html">Set up Facebook's own alerts →</a></p>
+    <div id="tier2"></div>
+    <h2>Scanner status</h2>
+    <div id="status"></div>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

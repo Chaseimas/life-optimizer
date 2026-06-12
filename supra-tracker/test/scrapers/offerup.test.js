@@ -16,5 +16,6 @@ test('parses offerup __NEXT_DATA__ listings (live fixture)', () => {
   }
   assert.ok(out.some((c) => c.city && c.state === 'AZ'), 'expected AZ locations');
   assert.ok(out.some((c) => typeof c.price === 'number'));
-  assert.ok(out.some((c) => c.photoUrl));
+  // image field is an object in their JSON - we must extract the string url
+  assert.ok(out.some((c) => typeof c.photoUrl === 'string' && c.photoUrl.startsWith('https://')));
 });
