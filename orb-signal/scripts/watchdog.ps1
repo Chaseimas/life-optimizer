@@ -12,12 +12,13 @@ function Test-Engine([string]$pattern) {
 $log = Join-Path $base "data\scheduler.log"
 $stamp = Get-Date -Format "ddd MM/dd/yyyy HH:mm:ss"
 
+# Restarts go through wscript so the relaunch is windowless too (no flash on revive).
 if (-not (Test-Engine "engine-stocks")) {
-  cmd /c "`"$base\scripts\start-stocks-engine.bat`""
+  Start-Process -FilePath "wscript.exe" -ArgumentList "C:\orb\scripts\restart-stocks.vbs"
   Add-Content $log "[$stamp] WATCHDOG: stocks engine was DOWN - restarted"
 }
 
 if (-not (Test-Engine "src/engine/index.ts")) {
-  cmd /c "`"$base\scripts\start-engine.bat`""
+  Start-Process -FilePath "wscript.exe" -ArgumentList "C:\orb\scripts\restart-crypto.vbs"
   Add-Content $log "[$stamp] WATCHDOG: crypto engine was DOWN - restarted"
 }
