@@ -109,6 +109,19 @@ export async function getPositions(): Promise<{ symbol: string; qty: string }[]>
 
 // -- Market data (IEX feed, free tier) --
 
+/** Latest 1-min close for a symbol — the true economic mark for an EOD flatten. */
+export async function getLatestClose(symbol: string): Promise<number | null> {
+  const start = new Date(Date.now() - 30 * 60000).toISOString();
+  const params = new URLSearchParams({
+    symbols: symbol, timeframe: "1Min", start, limit: "40", feed: "iex", sort: "asc",
+  });
+  const res = await fetch(`${ALPACA_REST_URL}/v2/stocks/bars?${params}`, { headers: headers() });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const bars: AlpacaBar[] = data.bars?.[symbol] ?? [];
+  return bars.length ? bars[bars.length - 1].c : null;
+}
+
 export async function getTodayBars(symbols: string[], startISO: string): Promise<Map<string, AlpacaBar[]>> {
   const out = new Map<string, AlpacaBar[]>();
   const params = new URLSearchParams({

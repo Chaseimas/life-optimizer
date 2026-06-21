@@ -265,7 +265,18 @@ export async function runStockSession(): Promise<void> {
           o.id !== t.entryOrderId &&
           new Date(o.filled_at ?? 0).getTime() > Date.now() - 120000
         );
-        const exitPrice = closer?.filled_avg_price ? parseFloat(closer.filled_avg_price) : t.fillPrice;
+        // Exit price priority: real liquidation fill → actual market close → entry.
+        // (Falling back to entry recorded held trades as flat +0.00R — masked +4R
+        //  of real P&L over the 2026-06-15..18 week. Never fall back to entry if a
+        //  market price is available.)
+        let exitPrice: number;
+        if (closer?.filled_avg_price) {
+          exitPrice = parseFloat(closer.filled_avg_price);
+        } else {
+          const mkt = await alpaca.getLatestClose(t.ticker);
+          exitPrice = mkt ?? t.fillPrice;
+          if (mkt === null) console.error(`[stocks] ${t.ticker}: no fill and no market close — recording at entry (flat)`);
+        }
         t.closed = true;
         t.exitType = "eod";
         t.exitPrice = exitPrice;
