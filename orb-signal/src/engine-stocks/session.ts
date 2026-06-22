@@ -15,6 +15,7 @@
 import { STOCKS_CONFIG as CFG } from "./config";
 import * as alpaca from "./alpaca";
 import * as alerts from "./alerts";
+import { acquireSessionLock, releaseSessionLock } from "./lock";
 import { insertSignal, updateSignalOutcome } from "@/lib/db/queries/signals";
 import type { AlpacaBar, Direction } from "@/lib/types";
 
@@ -81,6 +82,15 @@ export async function runStockSession(): Promise<void> {
   const { dateStr, sessionStartISO } = todayET();
   console.log(`[stocks] Session start for ${dateStr}`);
 
+  // Single-instance guard: only one session may run per day. Prevents the
+  // 2026-06-22 incident where multiple concurrent processes stacked duplicate
+  // orders into naked oversized positions.
+  if (!acquireSessionLock(dateStr)) {
+    console.log("[stocks] Another session already running today — exiting (single-instance lock).");
+    return;
+  }
+
+  try {
   // Holiday / weekend check via Alpaca clock
   try {
     const clock = await alpaca.getClock();
@@ -306,6 +316,9 @@ export async function runStockSession(): Promise<void> {
     equity: endEquity,
   });
   console.log(`[stocks] Session done. Day: ${dayR >= 0 ? "+" : ""}${dayR.toFixed(2)}R, equity $${endEquity.toFixed(0)}`);
+  } finally {
+    releaseSessionLock();
+  }
 }
 
 async function enterTrade(
@@ -434,8 +447,17 @@ async function enterTrade(
       closed: false, rMultiple: 0, exitType: "", exitPrice: 0,
     };
   } catch (err) {
+    const msg = String(err);
+    // Expected, benign rejections — log quietly, don't spam Discord:
+    //  - "cannot be sold short": ticker not shortable today (borrow unavailable)
+    //  - "must be entry orders": position already exists (shouldn't happen now
+    //    that the session lock prevents concurrent runs, but handle defensively)
+    if (msg.includes("cannot be sold short") || msg.includes("must be entry")) {
+      console.log(`[stocks] ${st.ticker} ${dir}: skipped (${msg.includes("short") ? "not shortable today" : "position already exists"})`);
+      return null;
+    }
     console.error(`[stocks] ${st.ticker} order failed:`, err);
-    await alerts.alertError(`${st.ticker} ${dir} order failed: ${String(err).slice(0, 200)}`);
+    await alerts.alertError(`${st.ticker} ${dir} order failed: ${msg.slice(0, 200)}`);
     return null;
   }
 }
