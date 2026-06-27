@@ -19,7 +19,9 @@ function headers() {
 
 export interface AlpacaAccount {
   equity: string;
-  buying_power: string;
+  buying_power: string;          // day-trade BP (up to 4x) — NOT the binding constraint
+  regt_buying_power: string;     // Reg-T BP (≈2x) — what the broker actually enforces
+  non_marginable_buying_power: string;
   cash: string;
   status: string;
 }

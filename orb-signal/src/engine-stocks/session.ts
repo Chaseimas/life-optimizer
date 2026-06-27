@@ -345,19 +345,22 @@ async function enterTrade(
     : signalPrice - CFG.TARGET_R * riskPerShareEst;
 
   try {
-    // Buying-power check: shorts consume ~1.5x margin, and a burst of simultaneous
-    // brackets can outrun the account (learned 2026-06-11: SOXL rejected, two orders
-    // queued unfilled). Size down to fit what's actually available.
+    // Buying-power check against REG-T BP (the constraint the broker enforces),
+    // not day-trade BP. Shorts require ~150% margin; longs ~100% (conservative).
+    // Reads live remaining BP, so it's portfolio-aware as positions open through
+    // the day. (2026-06-26: using day-trade BP let 3 shorts get sized past Reg-T
+    // and all were rejected — 0 trades that day.)
     try {
       const acct = await alpaca.getAccount();
-      const bp = parseFloat(acct.buying_power);
-      const bpCapQty = Math.floor((bp / 1.6) / signalPrice);
+      const regtBP = parseFloat(acct.regt_buying_power ?? acct.buying_power);
+      const marginFactor = dir === "SHORT" ? 1.5 : 1.0;
+      const bpCapQty = Math.floor((regtBP * 0.9) / (signalPrice * marginFactor));
       if (bpCapQty < qty) {
-        console.log(`[stocks] ${st.ticker}: sized down ${qty} → ${bpCapQty} (buying power $${bp.toFixed(0)})`);
+        console.log(`[stocks] ${st.ticker}: sized down ${qty} → ${Math.max(bpCapQty, 0)} (reg-t BP $${regtBP.toFixed(0)}, ${dir})`);
         qty = bpCapQty;
       }
       if (qty < 1) {
-        console.log(`[stocks] ${st.ticker}: no buying power left. Skipped.`);
+        console.log(`[stocks] ${st.ticker}: insufficient reg-t buying power ($${regtBP.toFixed(0)}). Skipped.`);
         return null;
       }
     } catch { /* if the check fails, proceed with notional-capped qty */ }
