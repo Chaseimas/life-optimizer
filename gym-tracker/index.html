@@ -1,0 +1,2134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Iron Log</title>
+<meta name="description" content="Progress pictures, body-comp scans, month-vs-month compare">
+<meta name="theme-color" content="#0b0c0e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="IronLog">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#0b0c0e; --surface:#131519; --card:#191c21; --card2:#1f232a; --border:#262a31; --border2:#31363f;
+  --ink:#e9e6df; --muted:#8a8f98; --faint:#5b6069;
+  --amber:#ffb020; --amber-dim:#c97e00; --teal:#0f9e80; --blue:#4f83e0; --red:#ff5c4d;
+  --nav-h:60px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{height:100%}
+body{
+  font-family:Bahnschrift,'Archivo Narrow','Roboto Condensed','sans-serif-condensed','Segoe UI',sans-serif;
+  background:var(--bg); color:var(--ink); min-height:100%;
+  background-image:linear-gradient(180deg,#0d0f12 0%,#0b0c0e 240px),
+    repeating-linear-gradient(135deg,rgba(255,255,255,.012) 0 2px,transparent 2px 6px);
+  font-size:15px; line-height:1.45; overscroll-behavior-y:contain;
+}
+button,input,select,textarea{font-family:inherit}
+/* ---------- header ---------- */
+header{
+  position:sticky;top:0;z-index:40;background:rgba(11,12,14,.92);backdrop-filter:blur(8px);
+  padding:calc(10px + env(safe-area-inset-top)) 18px 0;
+}
+.brand{display:flex;align-items:center;justify-content:space-between}
+.brand h1{font-size:20px;font-weight:700;letter-spacing:4px}
+.brand h1 em{color:var(--amber);font-style:normal}
+.brand h1 span.sub{display:block;font-size:9px;letter-spacing:3px;color:var(--faint);font-weight:400;margin-top:-2px}
+.iconbtn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);width:38px;height:38px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer}
+.iconbtn:active{border-color:var(--amber);color:var(--amber)}
+.hazard{height:5px;margin:10px -18px 0;background:repeating-linear-gradient(-45deg,var(--amber) 0 9px,#141414 9px 18px);opacity:.85}
+/* ---------- layout ---------- */
+main{max-width:640px;margin:0 auto;padding:16px 14px calc(var(--nav-h) + 84px + env(safe-area-inset-bottom))}
+section{display:none}section.active{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+h2.sec{font-size:12px;letter-spacing:2.5px;color:var(--muted);margin:4px 2px 10px;font-weight:700}
+h2.sec b{color:var(--amber);font-weight:700}
+.empty{border:1px dashed var(--border2);border-radius:12px;padding:38px 20px;text-align:center;color:var(--faint);
+  letter-spacing:2px;font-size:12px;margin-top:8px}
+.empty svg{display:block;margin:0 auto 12px;opacity:.5}
+/* ---------- bottom nav ---------- */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#101216;border-top:1px solid var(--border);
+  display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;background:none;border:none;color:var(--faint);height:var(--nav-h);cursor:pointer;
+  font-size:9.5px;letter-spacing:1.6px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:4px;
+  justify-content:center;border-top:2px solid transparent}
+nav.tabs button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button.active{color:var(--amber);border-top-color:var(--amber)}
+/* ---------- FAB ---------- */
+.fab{position:fixed;right:18px;bottom:calc(var(--nav-h) + 18px + env(safe-area-inset-bottom));z-index:45;
+  width:58px;height:58px;border-radius:14px;background:var(--amber);border:none;cursor:pointer;
+  box-shadow:0 6px 18px rgba(255,176,32,.35);display:none;align-items:center;justify-content:center}
+.fab svg{width:26px;height:26px;stroke:#141414;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fab:active{transform:scale(.95)}
+body[data-tab="photos"] .fab{display:flex}
+/* ---------- photos ---------- */
+.month-block{margin-bottom:22px}
+.month-head{display:flex;align-items:baseline;gap:10px;margin:0 2px 10px}
+.month-head .tag{background:var(--amber);color:#141414;font-weight:700;font-size:11px;letter-spacing:1.5px;
+  padding:3px 8px;border-radius:4px}
+.month-head .yr{color:var(--faint);font-size:11px;letter-spacing:2px}
+.month-head .n{margin-left:auto;color:var(--faint);font-size:11px;letter-spacing:1px}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pgrid .ph{position:relative;aspect-ratio:3/4;border-radius:8px;overflow:hidden;background:var(--card2);border:1px solid var(--border);cursor:pointer}
+.pgrid .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.pgrid .ph .pose{position:absolute;left:0;bottom:0;right:0;padding:10px 6px 4px;font-size:9px;letter-spacing:1.5px;
+  color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.72));font-weight:700}
+/* ---------- forms ---------- */
+label.f{display:block;font-size:10px;color:var(--muted);letter-spacing:1.5px;margin:0 0 4px;font-weight:700}
+input.f,select.f,textarea.f{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;
+  padding:11px 12px;color:var(--ink);font-size:15px;outline:none}
+input.f:focus,select.f:focus,textarea.f:focus{border-color:var(--amber)}
+input.f::-webkit-calendar-picker-indicator{filter:invert(.7)}
+.frow{display:flex;gap:10px;margin-bottom:12px}
+.frow>div{flex:1;min-width:0}
+.btn{background:var(--amber);color:#141414;border:none;border-radius:9px;padding:13px 18px;font-size:13px;
+  font-weight:700;letter-spacing:2px;cursor:pointer;width:100%}
+.btn:active{opacity:.85}
+.btn.ghost{background:none;border:1px solid var(--border2);color:var(--muted);letter-spacing:1.5px}
+.btn.danger{background:none;border:1px solid var(--red);color:var(--red)}
+.btn.slim{width:auto;padding:9px 14px;font-size:11px}
+/* ---------- scans ---------- */
+.scan-card{display:block}
+.scan-top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.scan-top .d{font-size:11px;letter-spacing:2px;color:var(--amber);font-weight:700}
+.scan-top .acts{margin-left:auto;display:flex;gap:6px}
+.scan-top .acts button{background:none;border:1px solid var(--border);border-radius:6px;color:var(--faint);
+  font-size:9.5px;letter-spacing:1px;padding:4px 8px;cursor:pointer;font-weight:700}
+.scan-main{display:flex;align-items:center;gap:14px}
+.scan-main .w{font-size:34px;font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.scan-main .w small{font-size:12px;color:var(--muted);letter-spacing:1px;margin-left:2px}
+.scan-main .delta{font-size:12px;color:var(--amber);font-weight:700;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.scan-main .sthumb{margin-left:auto;width:46px;height:58px;border-radius:6px;overflow:hidden;border:1px solid var(--border2);cursor:pointer;padding:0;background:none}
+.scan-main .sthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.scan-metrics{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.mchip{background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:11px;
+  color:var(--muted);letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.mchip b{color:var(--ink);font-weight:700;margin-left:3px}
+.scan-note{margin-top:8px;font-size:12px;color:var(--muted)}
+#scanFormWrap,#tapeFormWrap,#liftFormWrap{overflow:hidden}
+#scanFormWrap.closed,#tapeFormWrap.closed,#liftFormWrap.closed{display:none}
+.formhead{display:flex;align-items:center;margin-bottom:12px}
+.formhead b{font-size:12px;letter-spacing:2px;color:var(--amber)}
+.formhead button{margin-left:auto;background:none;border:none;color:var(--faint);font-size:11px;letter-spacing:1px;cursor:pointer;font-weight:700}
+.attach-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.attach-row .prev{width:40px;height:50px;border-radius:6px;overflow:hidden;border:1px solid var(--border2);display:none}
+.attach-row .prev img{width:100%;height:100%;object-fit:cover}
+/* ---------- compare ---------- */
+.cmp-pickrow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.cmp-pickrow .ab{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;flex:none}
+.cmp-pickrow .ab.a{background:var(--amber);color:#141414}
+.cmp-pickrow .ab.b{background:var(--blue);color:#0b0c0e}
+.chips{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;background:var(--card);border:1px solid var(--border2);color:var(--muted);border-radius:7px;
+  padding:7px 12px;font-size:11px;letter-spacing:1.2px;font-weight:700;cursor:pointer}
+.chips button.on-a{background:var(--amber);border-color:var(--amber);color:#141414}
+.chips button.on-b{background:var(--blue);border-color:var(--blue);color:#0b0c0e}
+.cmp-mode{display:flex;gap:0;margin:12px 0;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+.cmp-mode button{flex:1;background:none;border:none;color:var(--faint);padding:9px;font-size:11px;letter-spacing:2px;font-weight:700;cursor:pointer}
+.cmp-mode button.active{background:var(--card2);color:var(--amber)}
+.cmp-side{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pane{position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:var(--card2);border:1px solid var(--border)}
+.pane img{width:100%;height:100%;object-fit:cover;display:block;-webkit-user-drag:none;user-select:none}
+.pane .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 6px;font-size:10px;letter-spacing:1.5px;font-weight:700;
+  color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.75));display:flex;align-items:center;gap:6px}
+.pane .cap .abtag{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;flex:none}
+.pane .cap .abtag.a{background:var(--amber);color:#141414}
+.pane .cap .abtag.b{background:var(--blue);color:#0b0c0e}
+.pane .parrow{position:absolute;top:0;bottom:26px;width:44%;border:none;background:none;cursor:pointer;color:transparent}
+.pane .parrow.l{left:0}.pane .parrow.r{right:0}
+.pane .dots{position:absolute;top:8px;left:0;right:0;display:flex;justify-content:center;gap:4px;pointer-events:none}
+.pane .dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.35)}
+.pane .dots i.on{background:var(--amber)}
+.pane .nophoto{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--faint);
+  font-size:11px;letter-spacing:2px;text-align:center;padding:0 12px}
+.slider-wrap{position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:var(--card2);touch-action:none}
+.slider-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;-webkit-user-drag:none;user-select:none}
+.slider-wrap .top-img{clip-path:inset(0 0 0 50%)}
+.slider-handle{position:absolute;top:0;bottom:0;left:50%;width:3px;background:var(--amber);transform:translateX(-1.5px);
+  box-shadow:0 0 10px rgba(0,0,0,.6)}
+.slider-handle::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:34px;height:34px;border-radius:50%;background:var(--amber);
+  background-image:radial-gradient(circle at 50% 50%, #141414 1.5px, transparent 1.5px);
+  background-size:7px 7px;background-position:center}
+.slider-tag{position:absolute;top:8px;font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 7px;border-radius:4px}
+.slider-tag.a{left:8px;background:var(--amber);color:#141414}
+.slider-tag.b{right:8px;background:var(--blue);color:#0b0c0e}
+.cmp-stats{margin-top:14px}
+.cmp-stats table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.cmp-stats th{font-size:10px;letter-spacing:1.5px;color:var(--faint);text-align:right;padding:6px 4px;font-weight:700}
+.cmp-stats th:first-child{text-align:left}
+.cmp-stats td{padding:8px 4px;border-top:1px solid var(--border);font-size:14px;text-align:right}
+.cmp-stats td:first-child{text-align:left;color:var(--muted);font-size:11px;letter-spacing:1.5px;font-weight:700}
+.cmp-stats td.dl{color:var(--amber);font-weight:700}
+.cmp-note{font-size:11px;color:var(--faint);margin-top:8px;letter-spacing:.5px}
+/* ---------- trends ---------- */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.tile{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center}
+.tile .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.tile .l{font-size:8.5px;letter-spacing:1.5px;color:var(--faint);margin-top:3px;font-weight:700}
+.range-chips{display:flex;gap:6px;margin-bottom:12px}
+.range-chips button{flex:1;background:var(--card);border:1px solid var(--border2);color:var(--muted);border-radius:7px;
+  padding:8px;font-size:11px;letter-spacing:1.5px;font-weight:700;cursor:pointer}
+.range-chips button.active{background:var(--card2);border-color:var(--amber);color:var(--amber)}
+.chart-card{position:relative}
+.chart-head{display:flex;align-items:baseline;margin-bottom:6px}
+.chart-head .t{font-size:11px;letter-spacing:2px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
+.chart-head .t i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.chart-head .cur{margin-left:auto;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.chart-head .cur small{font-size:10px;color:var(--muted);margin-left:2px}
+.chart-box{position:relative}
+.chart-box svg{display:block;width:100%}
+.tooltip{position:absolute;pointer-events:none;background:#0d0f12;border:1px solid var(--border2);border-radius:7px;
+  padding:6px 9px;font-size:11px;display:none;z-index:5;white-space:nowrap;font-variant-numeric:tabular-nums;
+  box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.tooltip b{font-size:13px}
+.tooltip .tt-d{color:var(--muted);font-size:10px;letter-spacing:1px}
+/* ---------- overlays ---------- */
+.ovl{position:fixed;inset:0;z-index:140;background:rgba(5,6,8,.78);display:none;align-items:flex-end;justify-content:center}
+.ovl.open{display:flex}
+.sheet{background:var(--surface);border:1px solid var(--border2);border-bottom:none;border-radius:16px 16px 0 0;
+  width:100%;max-width:640px;padding:18px 18px calc(18px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto}
+.sheet h3{font-size:13px;letter-spacing:2.5px;color:var(--amber);margin-bottom:14px;font-weight:700}
+.sheet .grip{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:0 auto 14px}
+.addprev{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto}
+.addprev img{width:56px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border2);flex:none}
+.addprev .more{width:56px;height:72px;border-radius:6px;border:1px dashed var(--border2);display:flex;align-items:center;
+  justify-content:center;color:var(--faint);font-size:12px;flex:none}
+.posegrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
+.posegrid button{background:var(--card);border:1px solid var(--border2);color:var(--muted);border-radius:8px;
+  padding:10px 0;font-size:10.5px;letter-spacing:1px;font-weight:700;cursor:pointer}
+.posegrid button.on{background:var(--amber);border-color:var(--amber);color:#141414}
+/* viewer */
+#viewer{position:fixed;inset:0;z-index:120;background:#050608;display:none;flex-direction:column}
+#viewer.open{display:flex}
+#viewer .vtop{display:flex;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;gap:8px}
+#viewer .vtop .cap{font-size:12px;letter-spacing:2px;font-weight:700}
+#viewer .vtop .cap small{display:block;color:var(--muted);font-size:10px;letter-spacing:1.5px;font-weight:400}
+#viewer .vtop .sp{flex:1}
+#viewer .vimg{flex:1;position:relative;overflow:hidden;touch-action:pan-y}
+#viewer .vimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#viewer .vbot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom))}
+#viewer .varrow{position:absolute;top:0;bottom:0;width:30%;background:none;border:none;cursor:pointer;color:transparent;z-index:2}
+#viewer .varrow.l{left:0}#viewer .varrow.r{right:0}
+/* toast */
+#toasts{position:fixed;left:0;right:0;bottom:calc(var(--nav-h) + 14px + env(safe-area-inset-bottom));z-index:200;
+  display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{background:#15181d;border:1px solid var(--border2);border-left:3px solid var(--amber);border-radius:8px;
+  padding:10px 16px;font-size:12.5px;letter-spacing:.5px;max-width:86%;box-shadow:0 6px 20px rgba(0,0,0,.5);
+  animation:tin .2s ease}
+.toast.err{border-left-color:var(--red)}
+@keyframes tin{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+/* confirm */
+.cbox{background:var(--surface);border:1px solid var(--border2);border-radius:14px;width:86%;max-width:360px;padding:20px;margin:auto}
+.cbox h4{font-size:13px;letter-spacing:2px;margin-bottom:8px;color:var(--ink)}
+.cbox p{font-size:13px;color:var(--muted);margin-bottom:16px}
+.cbox .row{display:flex;gap:10px}
+.ovl.center{align-items:center}
+/* settings */
+.set-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)}
+.set-row:last-child{border-bottom:none}
+.set-row .lab{font-size:12px;letter-spacing:1.5px;color:var(--muted);font-weight:700;flex:1}
+.seg{display:flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+.seg button{background:none;border:none;color:var(--faint);padding:8px 16px;font-size:11px;letter-spacing:1px;font-weight:700;cursor:pointer}
+.seg button.on{background:var(--card2);color:var(--amber)}
+.hin{width:64px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;color:var(--ink);font-size:14px;outline:none;text-align:center}
+.hin:focus{border-color:var(--amber)}
+.storage-note{font-size:11px;color:var(--faint);letter-spacing:.5px}
+/* ---------- v2: nag, lifts, tape, timelapse, marks ---------- */
+.nag{display:none;background:#1d1608;border:1px solid var(--amber-dim);border-radius:10px;padding:10px 12px;
+  margin-bottom:14px;align-items:center;gap:10px;font-size:12px;letter-spacing:.5px}
+.nag.show{display:flex}
+.nag b{color:var(--amber);letter-spacing:1.5px}
+.nag button{flex:none}
+.nag .x{background:none;border:none;color:var(--faint);font-size:15px;cursor:pointer;padding:2px 6px}
+.tl-btn{margin-bottom:14px;display:flex;gap:10px}
+.tl-btn .btn{display:flex;align-items:center;justify-content:center;gap:8px}
+.lift-form .frow:last-of-type{margin-bottom:0}
+.lift-card .top{display:flex;align-items:baseline;gap:10px}
+.lift-card .ex{font-size:12px;letter-spacing:2px;color:var(--amber);font-weight:700}
+.lift-card .d{font-size:10px;color:var(--faint);letter-spacing:1px}
+.lift-card .acts{margin-left:auto;display:flex;gap:6px}
+.lift-card .acts button{background:none;border:1px solid var(--border);border-radius:6px;color:var(--faint);
+  font-size:9.5px;letter-spacing:1px;padding:4px 8px;cursor:pointer;font-weight:700}
+.lift-card .main{display:flex;align-items:baseline;gap:12px;margin-top:6px;font-variant-numeric:tabular-nums}
+.lift-card .wxr{font-size:24px;font-weight:700}
+.lift-card .wxr small{font-size:12px;color:var(--muted)}
+.lift-card .e1{font-size:12px;color:var(--muted)}
+.lift-card .e1 b{color:var(--ink)}
+.pr-badge{background:var(--amber);color:#141414;font-size:9px;font-weight:700;letter-spacing:1px;
+  padding:3px 7px;border-radius:4px}
+.tlprev video{width:100%;border-radius:10px;border:1px solid var(--border2);margin-top:12px;display:block}
+.tl-prog{font-size:11px;color:var(--muted);letter-spacing:1px;margin-top:10px;min-height:16px}
+.mark-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.mark-row .k{font-size:9px;font-weight:700;letter-spacing:1px;padding:2px 6px;border-radius:4px;flex:none}
+.mark-row .k.start{background:var(--teal);color:#0b0c0e}
+.mark-row .k.stop{background:var(--red);color:#fff}
+.mark-row .lb{flex:1;letter-spacing:.5px}
+.mark-row .dt{color:var(--faint);font-size:10px;letter-spacing:1px}
+.mark-row .x{background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;padding:2px 6px}
+.mark-add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.mark-add input[type=text]{flex:2;min-width:90px}
+.mark-add input[type=date]{flex:2;min-width:120px}
+@media(min-width:520px){ .pgrid{grid-template-columns:repeat(4,1fr)} }
+</style>
+</head>
+<body data-tab="photos">
+
+<header>
+  <div class="brand">
+    <h1>IRON<em>LOG</em><span class="sub">PROGRESS &middot; SCANS &middot; COMPARE</span></h1>
+    <button class="iconbtn" id="btnSettings" aria-label="Settings">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+  <div class="hazard"></div>
+</header>
+
+<main>
+  <div class="nag" id="nag">
+    <span><b>NO RECENT BACKUP</b> — pics live only on this device</span>
+    <button class="btn slim" id="nagExport">EXPORT</button>
+    <button class="x" id="nagX" aria-label="Dismiss">✕</button>
+  </div>
+  <!-- PHOTOS -->
+  <section id="tab-photos" class="active">
+    <div class="tl-btn"><button class="btn ghost" id="btnTimelapse">▶&ensp;TIMELAPSE</button></div>
+    <div id="photosFeed"></div>
+  </section>
+
+  <!-- SCANS -->
+  <section id="tab-scans">
+    <div class="cmp-mode" style="margin-top:0">
+      <button id="segScans" class="active">SCANS</button>
+      <button id="segTape">TAPE</button>
+    </div>
+    <div id="scanArea">
+    <button class="btn" id="btnToggleScanForm" style="margin-bottom:14px">+ ADD SCAN</button>
+    <div class="card closed" id="scanFormWrap">
+      <div class="formhead"><b id="scanFormTitle">NEW SCAN</b><button id="btnCancelScan">CANCEL</button></div>
+      <div class="frow">
+        <div><label class="f" for="scDate">DATE</label><input class="f" type="date" id="scDate"></div>
+        <div><label class="f" for="scWeight">WEIGHT <span id="wUnit1">(LB)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="scWeight" placeholder="185.0"></div>
+      </div>
+      <div class="frow">
+        <div><label class="f" for="scBf">BODY FAT %</label><input class="f" type="number" inputmode="decimal" step="0.1" id="scBf" placeholder="18.5"></div>
+        <div><label class="f" for="scMuscle">MUSCLE <span id="wUnit2">(LB)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="scMuscle" placeholder="82.0"></div>
+      </div>
+      <div class="frow">
+        <div><label class="f" for="scVisc">VISCERAL FAT</label><input class="f" type="number" inputmode="decimal" step="0.5" id="scVisc" placeholder="7"></div>
+        <div><label class="f" for="scWater">WATER %</label><input class="f" type="number" inputmode="decimal" step="0.1" id="scWater" placeholder="55.0"></div>
+      </div>
+      <div class="frow"><div>
+        <label class="f">BMI (AUTO)</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="mchip" style="font-size:15px;padding:9px 14px"><b id="scBmiOut">—</b></div>
+          <span class="storage-note" id="bmiHint">set height in settings for auto-BMI</span>
+        </div>
+      </div></div>
+      <div class="frow"><div><label class="f" for="scNote">NOTE</label><input class="f" type="text" id="scNote" placeholder="post-cut check-in…"></div></div>
+      <div class="attach-row">
+        <button class="btn ghost slim" id="btnAttachSheet">ATTACH SCAN PHOTO</button>
+        <div class="prev" id="sheetPrev"><img alt="scan sheet"></div>
+        <button class="btn ghost slim" id="btnClearSheet" style="display:none">✕</button>
+      </div>
+      <button class="btn" id="btnSaveScan">SAVE SCAN</button>
+    </div>
+    <div id="scansList"></div>
+    </div><!-- /scanArea -->
+    <div id="tapeArea" style="display:none">
+      <button class="btn" id="btnToggleTapeForm" style="margin-bottom:14px">+ ADD TAPE</button>
+      <div class="card closed" id="tapeFormWrap">
+        <div class="formhead"><b id="tapeFormTitle">NEW TAPE</b><button id="btnCancelTape">CANCEL</button></div>
+        <div class="frow">
+          <div><label class="f" for="tpDate">DATE</label><input class="f" type="date" id="tpDate"></div>
+          <div><label class="f" for="tpNeck">NECK <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpNeck"></div>
+        </div>
+        <div class="frow">
+          <div><label class="f" for="tpChest">CHEST <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpChest"></div>
+          <div><label class="f" for="tpArms">ARMS <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpArms"></div>
+        </div>
+        <div class="frow">
+          <div><label class="f" for="tpWaist">WAIST <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpWaist"></div>
+          <div><label class="f" for="tpThighs">THIGHS <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpThighs"></div>
+        </div>
+        <button class="btn" id="btnSaveTape">SAVE TAPE</button>
+      </div>
+      <div id="tapeList"></div>
+    </div>
+  </section>
+
+  <!-- LIFTS -->
+  <section id="tab-lifts">
+    <button class="btn" id="btnToggleLiftForm" style="margin-bottom:14px">+ LOG LIFT</button>
+    <div class="card closed lift-form" id="liftFormWrap">
+      <div class="formhead"><b id="liftFormTitle">LOG LIFT</b><button id="btnCancelLift">CANCEL</button></div>
+      <div class="frow">
+        <div><label class="f" for="lfEx">EXERCISE</label>
+          <select class="f" id="lfEx">
+            <option value="BENCH">BENCH</option><option value="SQUAT">SQUAT</option>
+            <option value="DEADLIFT">DEADLIFT</option><option value="OHP">OHP</option>
+            <option value="ROW">ROW</option><option value="__other">OTHER…</option>
+          </select></div>
+        <div id="lfOtherWrap" style="display:none"><label class="f" for="lfOther">NAME</label><input class="f" type="text" id="lfOther" placeholder="INCLINE DB"></div>
+      </div>
+      <div class="frow">
+        <div><label class="f" for="lfDate">DATE</label><input class="f" type="date" id="lfDate"></div>
+        <div><label class="f" for="lfWeight">WEIGHT <span id="wUnit3">(LB)</span></label><input class="f" type="number" inputmode="decimal" step="2.5" id="lfWeight" placeholder="225"></div>
+        <div><label class="f" for="lfReps">REPS</label><input class="f" type="number" inputmode="numeric" step="1" min="1" id="lfReps" placeholder="5"></div>
+      </div>
+      <div class="frow"><div>
+        <label class="f">EST. 1RM (EPLEY)</label>
+        <div class="mchip" style="font-size:15px;padding:9px 14px;display:inline-block"><b id="lfE1Out">—</b></div>
+      </div></div>
+      <button class="btn" id="btnSaveLift">SAVE LIFT</button>
+    </div>
+    <div class="chips" id="liftChips" style="margin-bottom:12px"></div>
+    <div id="liftHead"></div>
+    <div id="liftList"></div>
+  </section>
+
+  <!-- COMPARE -->
+  <section id="tab-compare">
+    <h2 class="sec">PICK TWO <b>MONTHS</b></h2>
+    <div class="cmp-pickrow"><span class="ab a">A</span><div class="chips" id="chipsA"></div></div>
+    <div class="cmp-pickrow"><span class="ab b">B</span><div class="chips" id="chipsB"></div></div>
+    <div class="cmp-mode">
+      <button id="modeSide" class="active">SIDE BY SIDE</button>
+      <button id="modeSlider">SLIDER</button>
+    </div>
+    <div id="cmpBody"></div>
+    <div class="cmp-stats" id="cmpStats"></div>
+  </section>
+
+  <!-- TRENDS -->
+  <section id="tab-trends">
+    <div class="tiles" id="tiles"></div>
+    <div class="range-chips" id="rangeChips">
+      <button data-r="90">3M</button><button data-r="180">6M</button>
+      <button data-r="365">1Y</button><button data-r="0" class="active">ALL</button>
+    </div>
+    <div id="charts"></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-tab="photos" class="active" aria-label="Photos">
+    <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    PHOTOS</button>
+  <button data-tab="scans" aria-label="Scans">
+    <svg viewBox="0 0 24 24"><path d="M9 2h6v4H9z"/><path d="M15 4h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3"/><path d="M8 12h8M8 16h5"/></svg>
+    SCANS</button>
+  <button data-tab="lifts" aria-label="Lifts">
+    <svg viewBox="0 0 24 24"><rect x="1.5" y="8" width="3.5" height="8" rx="1"/><rect x="6" y="5" width="3.5" height="14" rx="1"/><line x1="9.5" y1="12" x2="14.5" y2="12"/><rect x="14.5" y="5" width="3.5" height="14" rx="1"/><rect x="19" y="8" width="3.5" height="8" rx="1"/></svg>
+    LIFTS</button>
+  <button data-tab="compare" aria-label="Compare">
+    <svg viewBox="0 0 24 24"><rect x="2" y="4" width="8.5" height="16" rx="1.5"/><rect x="13.5" y="4" width="8.5" height="16" rx="1.5"/></svg>
+    COMPARE</button>
+  <button data-tab="trends" aria-label="Trends">
+    <svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M4 16l5-6 4 3 6-8"/></svg>
+    TRENDS</button>
+</nav>
+
+<button class="fab" id="fab" aria-label="Add photos">
+  <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/><path d="M12 10.5v5M9.5 13h5"/></svg>
+</button>
+
+<!-- add-photo source sheet -->
+<div class="ovl" id="srcSheet">
+  <div class="sheet">
+    <div class="grip"></div><h3>ADD PROGRESS PICS</h3>
+    <div style="display:flex;gap:10px;margin-bottom:6px">
+      <button class="btn" id="btnCam">📷&ensp;CAMERA</button>
+      <button class="btn ghost" id="btnGal">GALLERY</button>
+    </div>
+  </div>
+</div>
+
+<!-- photo meta sheet -->
+<div class="ovl" id="metaSheet">
+  <div class="sheet">
+    <div class="grip"></div><h3 id="metaTitle">TAG YOUR PICS</h3>
+    <div class="addprev" id="addPrev"></div>
+    <div class="frow"><div><label class="f" for="phDate">DATE</label><input class="f" type="date" id="phDate"></div></div>
+    <label class="f">POSE</label>
+    <div class="posegrid" id="poseGrid">
+      <button data-p="front" class="on">FRONT</button><button data-p="side">SIDE</button>
+      <button data-p="back">BACK</button><button data-p="flex">FLEX</button><button data-p="other">OTHER</button>
+    </div>
+    <div class="frow"><div><label class="f" for="phNote">NOTE</label><input class="f" type="text" id="phNote" placeholder="end of cut week 6…"></div></div>
+    <button class="btn" id="btnSavePhotos">SAVE</button>
+  </div>
+</div>
+
+<!-- fullscreen viewer -->
+<div id="viewer">
+  <div class="vtop">
+    <div class="cap" id="vCap">—<small id="vSub"></small></div>
+    <div class="sp"></div>
+    <button class="iconbtn" id="vClose" aria-label="Close">✕</button>
+  </div>
+  <div class="vimg" id="vImgWrap">
+    <button class="varrow l" id="vPrev" aria-label="Previous">‹</button>
+    <img id="vImg" alt="progress photo">
+    <button class="varrow r" id="vNext" aria-label="Next">›</button>
+  </div>
+  <div class="vbot">
+    <button class="btn ghost" id="vEdit">EDIT</button>
+    <button class="btn danger" id="vDelete">DELETE</button>
+  </div>
+</div>
+
+<!-- timelapse -->
+<div class="ovl" id="tlSheet">
+  <div class="sheet">
+    <div class="grip"></div><h3>TIMELAPSE</h3>
+    <label class="f">POSE</label>
+    <div class="posegrid" id="tlPoseGrid" style="grid-template-columns:repeat(5,1fr)">
+      <button data-p="front" class="on">FRONT</button><button data-p="side">SIDE</button>
+      <button data-p="back">BACK</button><button data-p="flex">FLEX</button><button data-p="other">OTHER</button>
+    </div>
+    <button class="btn" id="btnMakeTl">GENERATE</button>
+    <div class="tl-prog" id="tlProg"></div>
+    <div class="tlprev" id="tlPrev"></div>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="ovl" id="setSheet">
+  <div class="sheet">
+    <div class="grip"></div><h3>SETTINGS</h3>
+    <div class="set-row"><span class="lab">UNITS</span>
+      <div class="seg" id="unitSeg"><button data-u="us" class="on">LB / FT</button><button data-u="metric">KG / CM</button></div>
+    </div>
+    <div class="set-row" id="rowHeightUs"><span class="lab">HEIGHT</span>
+      <input class="hin" type="number" inputmode="numeric" id="hFt" placeholder="5"><span class="storage-note">ft</span>
+      <input class="hin" type="number" inputmode="numeric" id="hIn" placeholder="10"><span class="storage-note">in</span>
+    </div>
+    <div class="set-row" id="rowHeightM" style="display:none"><span class="lab">HEIGHT</span>
+      <input class="hin" type="number" inputmode="numeric" id="hCm" placeholder="178"><span class="storage-note">cm</span>
+    </div>
+    <div class="set-row"><span class="lab">GOAL WEIGHT</span>
+      <input class="hin" type="number" inputmode="decimal" id="goalW" placeholder="—" style="width:76px"><span class="storage-note" id="goalWU">lb</span>
+    </div>
+    <div class="set-row"><span class="lab">GOAL BODY FAT</span>
+      <input class="hin" type="number" inputmode="decimal" id="goalBf" placeholder="—" style="width:76px"><span class="storage-note">%</span>
+    </div>
+    <div class="set-row" style="flex-direction:column;align-items:stretch">
+      <span class="lab" style="margin-bottom:4px">CYCLE MARKS <span class="storage-note" style="font-weight:400;letter-spacing:.5px">— shown on weight &amp; BF charts</span></span>
+      <div id="marksList"></div>
+      <div class="mark-add">
+        <input class="f" type="text" id="mkLabel" placeholder="label…" style="width:auto">
+        <input class="f" type="date" id="mkDate" style="width:auto">
+        <div class="seg" id="mkKind"><button data-k="start" class="on">START</button><button data-k="stop">STOP</button></div>
+        <button class="btn slim" id="mkAdd">ADD</button>
+      </div>
+    </div>
+    <div class="set-row"><span class="lab">STORAGE</span><span class="storage-note" id="storageNote">…</span></div>
+    <div class="set-row" style="flex-direction:column;align-items:stretch;gap:10px">
+      <button class="btn ghost" id="btnExport">EXPORT BACKUP</button>
+      <button class="btn ghost" id="btnImport">IMPORT BACKUP</button>
+      <button class="btn danger" id="btnWipe">WIPE ALL DATA</button>
+    </div>
+    <div class="storage-note" style="margin-top:10px">All data lives on this device only. Export a backup now and then — it includes every photo.</div>
+  </div>
+</div>
+
+<!-- confirm -->
+<div class="ovl center" id="confirmOvl">
+  <div class="cbox">
+    <h4 id="cTitle">SURE?</h4><p id="cMsg"></p>
+    <div class="row"><button class="btn ghost" id="cNo">CANCEL</button><button class="btn danger" id="cYes">DELETE</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<input type="file" id="inCam" accept="image/*" capture="environment" hidden>
+<input type="file" id="inGal" accept="image/*" multiple hidden>
+<input type="file" id="inSheet" accept="image/*" hidden>
+<input type="file" id="inImport" accept="application/json,.json" hidden>
+
+<script>
+/* ============ constants & state ============ */
+const POSES = {front:'FRONT', side:'SIDE', back:'BACK', flex:'FLEX', other:'OTHER'};
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const MONTHS_FULL = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+const CHARTS = [
+  {key:'weightLb', title:'WEIGHT',   color:'#c97e00', unit:()=>S.units==='metric'?'kg':'lb', conv:v=>S.units==='metric'?v*0.45359237:v},
+  {key:'bodyFat',  title:'BODY FAT', color:'#0f9e80', unit:()=>'%',  conv:v=>v},
+  {key:'muscleLb', title:'MUSCLE',   color:'#4f83e0', unit:()=>S.units==='metric'?'kg':'lb', conv:v=>S.units==='metric'?v*0.45359237:v},
+];
+const MEAS_FIELDS = [['neck','NECK'], ['chest','CHEST'], ['arms','ARMS'], ['waist','WAIST'], ['thighs','THIGHS']];
+const WAIST_COLOR = '#d4688a', LIFT_COLOR = '#c97e00';
+let db = null;
+let S = loadSettings();               // settings
+let allPhotos = [], allScans = [];    // in-memory mirrors (sorted ts desc)
+let allLifts = [], allMeasures = [];
+let pendingFiles = [];                // files waiting in meta sheet
+let editingPhotoId = null, editingScanId = null, sheetBlob = null;
+let editingLiftId = null, editingTapeId = null;
+let liftFilter = 'ALL', scanView = 'scans';
+let viewer = {list: [], idx: 0, kind: 'photo'};
+let cmp = {a: null, b: null, ai: 0, bi: 0, mode: 'side', syncing: false};
+let range = 0;                        // trend range days, 0 = all
+const thumbURLs = new Map();          // photo/scan id -> objectURL  (key: 'p'+id / 's'+id)
+let persistAsked = false, nagDismissed = false, tlBusy = false, tlURL = null;
+
+function loadSettings(){
+  const defs = {units:'us', heightIn:null, goalWeightLb:null, goalBf:null, marks:[], lastExport:null};
+  try{
+    const s = Object.assign(defs, JSON.parse(localStorage.getItem('ironlog-settings')||'{}'));
+    if(!Array.isArray(s.marks)) s.marks = [];
+    return s;
+  }
+  catch(e){ return defs; }
+}
+function saveSettings(){ localStorage.setItem('ironlog-settings', JSON.stringify(S)); }
+
+/* ============ tiny utils ============ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function toast(msg, err){
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : '');
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+}
+function monthKey(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+function monthLabel(mk){ const [y,m] = mk.split('-'); return MONTHS[+m-1] + " '" + y.slice(2); }
+function monthLabelFull(mk){ const [y,m] = mk.split('-'); return MONTHS_FULL[+m-1] + ' ' + y; }
+function fmtDay(ts){ const d = new Date(ts); return MONTHS[d.getMonth()] + ' ' + d.getDate(); }
+function fmtDate(ts){ const d = new Date(ts); return MONTHS[d.getMonth()] + ' ' + d.getDate() + " '" + String(d.getFullYear()).slice(2); }
+function todayStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function r1(v){ return Math.round(v*10)/10; }
+function dispW(lb){ return S.units==='metric' ? r1(lb*0.45359237) : r1(lb); }
+function wUnit(){ return S.units==='metric' ? 'KG' : 'LB'; }
+function inputToLb(v){ return S.units==='metric' ? v/0.45359237 : v; }
+function calcBmi(lb){ return S.heightIn ? r1(703*lb/(S.heightIn*S.heightIn)) : null; }
+function thumbURL(kind, rec){
+  const k = kind + rec.id;
+  if(!thumbURLs.has(k)) thumbURLs.set(k, URL.createObjectURL(rec.thumb || rec.img));
+  return thumbURLs.get(k);
+}
+function imgURL(kind, rec){
+  const k = 'f' + kind + rec.id;
+  if(!thumbURLs.has(k)) thumbURLs.set(k, URL.createObjectURL(rec.img));
+  return thumbURLs.get(k);
+}
+function dropThumbURL(kind, id){
+  for(const k of [kind + id, 'f' + kind + id]){
+    if(thumbURLs.has(k)){ URL.revokeObjectURL(thumbURLs.get(k)); thumbURLs.delete(k); }
+  }
+}
+// ts values must be unique per store: same-day records share noon, so bump ms until free
+function nextFreeTs(taken, baseMs){
+  let ts = baseMs;
+  while(taken.has(ts)) ts++;
+  taken.add(ts);
+  return ts;
+}
+function sameDay(tsA, dateB){
+  const a = new Date(tsA);
+  return a.getFullYear() === dateB.getFullYear() && a.getMonth() === dateB.getMonth() && a.getDate() === dateB.getDate();
+}
+function refreshUI(){
+  const t = document.body.dataset.tab;
+  if(t === 'photos') renderPhotos();
+  else if(t === 'scans') renderScans();
+  else if(t === 'lifts') renderLifts();
+  else if(t === 'compare') renderCompare();
+  else if(t === 'trends') renderTrends();
+  updateNag();
+}
+/* overlay manager: every overlay open pushes a history entry so the Android
+   back gesture closes the top overlay instead of exiting the app */
+let popClosing = false, ignorePop = 0;
+function openOvl(el){
+  el.classList.add('open');
+  try{ history.pushState({ovl: el.id}, ''); }catch(e){}
+}
+function closeOvl(el){
+  if(!el.classList.contains('open')) return;
+  el.classList.remove('open');
+  if(el.id === 'viewer'){
+    if(vFullURL){ URL.revokeObjectURL(vFullURL); vFullURL = null; }
+    viewer.open = false;
+  }
+  if(el.id === 'confirmOvl' && confirmResolve){ const r = confirmResolve; confirmResolve = null; r(false); }
+  if(!popClosing && history.state && history.state.ovl === el.id){
+    // consuming our own sentinel entry — the resulting popstate must not close the next overlay down
+    ignorePop++;
+    try{ history.back(); }catch(e){ ignorePop--; }
+  }
+}
+function topOverlay(){
+  if(document.getElementById('confirmOvl').classList.contains('open')) return document.getElementById('confirmOvl');
+  const open = [...document.querySelectorAll('.ovl.open')];
+  if(open.length) return open[open.length - 1];
+  const v = document.getElementById('viewer');
+  return v.classList.contains('open') ? v : null;
+}
+window.addEventListener('popstate', ()=>{
+  if(ignorePop > 0){ ignorePop--; return; }
+  const top = topOverlay();
+  if(top){
+    if(top.id === 'tlSheet' && tlBusy){
+      // don't let the back gesture kill a render; restore the sentinel it just popped
+      try{ history.pushState({ovl: 'tlSheet'}, ''); }catch(e){}
+      return;
+    }
+    popClosing = true; closeOvl(top); popClosing = false;
+  }
+});
+
+/* ============ IndexedDB ============ */
+function openDB(){
+  return new Promise((res, rej)=>{
+    const r = indexedDB.open('ironlog', 2);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('photos')){
+        const p = d.createObjectStore('photos', {keyPath:'id', autoIncrement:true});
+        p.createIndex('month','month'); p.createIndex('ts','ts');
+      }
+      if(!d.objectStoreNames.contains('scans')){
+        const s = d.createObjectStore('scans', {keyPath:'id', autoIncrement:true});
+        s.createIndex('ts','ts');
+      }
+      if(!d.objectStoreNames.contains('lifts')){
+        const l = d.createObjectStore('lifts', {keyPath:'id', autoIncrement:true});
+        l.createIndex('ts','ts'); l.createIndex('exercise','exercise');
+      }
+      if(!d.objectStoreNames.contains('measures')){
+        const m = d.createObjectStore('measures', {keyPath:'id', autoIncrement:true});
+        m.createIndex('ts','ts');
+      }
+    };
+    r.onblocked = () => toast('Close other IronLog tabs to finish updating', true);
+    r.onsuccess = () => {
+      const d = r.result;
+      d.onversionchange = () => d.close();  // never block a future upgrade
+      res(d);
+    };
+    r.onerror = () => rej(r.error);
+  });
+}
+function dbAll(store){
+  return new Promise((res, rej)=>{
+    const t = db.transaction(store).objectStore(store).getAll();
+    t.onsuccess = () => res(t.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+function dbPut(store, rec){
+  return new Promise((res, rej)=>{
+    const t = db.transaction(store,'readwrite').objectStore(store).put(rec);
+    t.onsuccess = () => res(t.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+function dbDel(store, id){
+  return new Promise((res, rej)=>{
+    const t = db.transaction(store,'readwrite').objectStore(store).delete(id);
+    t.onsuccess = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
+async function reloadData(){
+  [allPhotos, allScans, allLifts, allMeasures] = await Promise.all([
+    dbAll('photos'), dbAll('scans'), dbAll('lifts'), dbAll('measures')]);
+  allPhotos.sort((a,b)=>b.ts-a.ts);
+  allScans.sort((a,b)=>b.ts-a.ts);
+  allLifts.sort((a,b)=>b.ts-a.ts);
+  allMeasures.sort((a,b)=>b.ts-a.ts);
+  updateNag();
+}
+function updateNag(){
+  const hasData = allPhotos.length + allScans.length + allLifts.length + allMeasures.length > 0;
+  const stale = !S.lastExport || (Date.now() - S.lastExport) > 30*86400000;
+  $('#nag').classList.toggle('show', hasData && stale && !nagDismissed);
+}
+async function ensurePersist(){
+  if(persistAsked || !navigator.storage || !navigator.storage.persist) return;
+  persistAsked = true;
+  try{ await navigator.storage.persist(); }catch(e){}
+}
+
+/* ============ image pipeline ============ */
+async function loadBitmap(file){
+  try{ return await createImageBitmap(file, {imageOrientation:'from-image'}); }
+  catch(e){
+    try{ return await createImageBitmap(file); }
+    catch(e2){
+      return new Promise((res, rej)=>{
+        const u = URL.createObjectURL(file), im = new Image();
+        im.onload = ()=>{ URL.revokeObjectURL(u); res(im); };
+        im.onerror = ()=>{ URL.revokeObjectURL(u); rej(new Error('decode failed')); };
+        im.src = u;
+      });
+    }
+  }
+}
+function scaleToBlob(src, maxEdge, q){
+  const w = src.width, h = src.height;
+  const f = Math.min(1, maxEdge/Math.max(w,h));
+  const cw = Math.max(1, Math.round(w*f)), ch = Math.max(1, Math.round(h*f));
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  c.getContext('2d').drawImage(src, 0, 0, cw, ch);
+  return new Promise((res, rej)=> c.toBlob(b => b ? res(b) : rej(new Error('encode failed')), 'image/jpeg', q));
+}
+async function processImage(file){
+  const bmp = await loadBitmap(file);
+  const img = await scaleToBlob(bmp, 1600, 0.85);
+  const thumb = await scaleToBlob(bmp, 360, 0.75);
+  if(bmp.close) bmp.close();
+  return {img, thumb};
+}
+
+/* ============ tabs ============ */
+function switchTab(name){
+  document.body.dataset.tab = name;
+  $$('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-'+name));
+  if(name === 'photos') renderPhotos();
+  if(name === 'scans') renderScans();
+  if(name === 'lifts') renderLifts();
+  if(name === 'compare') renderCompare();
+  if(name === 'trends') renderTrends();
+}
+$$('nav.tabs button').forEach(b => b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+
+/* ============ PHOTOS tab ============ */
+function photosByMonth(){
+  const m = new Map();
+  for(const p of allPhotos){
+    if(!m.has(p.month)) m.set(p.month, []);
+    m.get(p.month).push(p);
+  }
+  return m; // insertion order = ts desc because allPhotos sorted
+}
+function renderPhotos(){
+  const feed = $('#photosFeed');
+  if(!allPhotos.length){
+    feed.innerHTML = `<div class="empty">
+      <svg width="54" height="30" viewBox="0 0 54 30" fill="none" stroke="#5b6069" stroke-width="2" stroke-linecap="round">
+        <rect x="2" y="8" width="6" height="14" rx="1.5"/><rect x="10" y="4" width="6" height="22" rx="1.5"/>
+        <line x1="16" y1="15" x2="38" y2="15"/>
+        <rect x="38" y="4" width="6" height="22" rx="1.5"/><rect x="46" y="8" width="6" height="14" rx="1.5"/>
+      </svg>
+      NO PICS YET<br><span style="font-size:10px;letter-spacing:1px">hit the camera button to log your first check-in</span></div>`;
+    return;
+  }
+  let html = '';
+  for(const [mk, list] of photosByMonth()){
+    html += `<div class="month-block">
+      <div class="month-head"><span class="tag">${monthLabel(mk).split(" ")[0]}</span>
+        <span class="yr">${mk.slice(0,4)}</span><span class="n">${list.length} PIC${list.length>1?'S':''}</span></div>
+      <div class="pgrid">` +
+      list.map(p => `<div class="ph" data-id="${p.id}"><img src="${thumbURL('p', p)}" alt="${POSES[p.pose]} ${fmtDay(p.ts)}" loading="lazy"><span class="pose">${POSES[p.pose]} · ${fmtDay(p.ts)}</span></div>`).join('') +
+      `</div></div>`;
+  }
+  feed.innerHTML = html;
+  feed.querySelectorAll('.ph').forEach(el => el.addEventListener('click', ()=>{
+    const id = +el.dataset.id;
+    const p = allPhotos.find(x => x.id === id);
+    const monthList = allPhotos.filter(x => x.month === p.month);
+    openViewer(monthList, monthList.findIndex(x => x.id === id), 'photo');
+  }));
+}
+
+/* add flow */
+$('#fab').addEventListener('click', ()=>{
+  // a pending batch survives an accidental back-gesture/backdrop close — resume it
+  if(pendingFiles.length && editingPhotoId === null){ openOvl($('#metaSheet')); return; }
+  openOvl($('#srcSheet'));
+});
+$('#btnCam').addEventListener('click', ()=> $('#inCam').click());
+$('#btnGal').addEventListener('click', ()=> $('#inGal').click());
+$('#inCam').addEventListener('change', e => intakeFiles([...e.target.files]));
+$('#inGal').addEventListener('change', e => intakeFiles([...e.target.files]));
+function intakeFiles(files){
+  if(!files.length) return;
+  closeOvl($('#srcSheet'));
+  pendingFiles = files;
+  editingPhotoId = null;
+  $('#metaTitle').textContent = 'TAG YOUR PICS';
+  $('#phDate').value = todayStr();
+  $('#phNote').value = '';
+  setPose('front');
+  const prev = $('#addPrev');
+  prev.innerHTML = '';
+  files.slice(0,6).forEach(f => {
+    const im = document.createElement('img');
+    im.src = URL.createObjectURL(f);
+    im.onload = ()=>URL.revokeObjectURL(im.src);
+    prev.appendChild(im);
+  });
+  if(files.length > 6){
+    const m = document.createElement('div'); m.className = 'more'; m.textContent = '+'+(files.length-6);
+    prev.appendChild(m);
+  }
+  openOvl($('#metaSheet'));
+  $('#inCam').value = ''; $('#inGal').value = '';
+}
+function setPose(p){
+  $$('#poseGrid button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+}
+$$('#poseGrid button').forEach(b => b.addEventListener('click', ()=> setPose(b.dataset.p)));
+function currentPose(){ return $('#poseGrid button.on').dataset.p; }
+
+$('#btnSavePhotos').addEventListener('click', async ()=>{
+  const dateStr = $('#phDate').value || todayStr();
+  const base = new Date(dateStr + 'T12:00:00');
+  if(isNaN(base)){ toast('Bad date', true); return; }
+  const pose = currentPose(), note = $('#phNote').value.trim();
+  const btn = $('#btnSavePhotos');
+  btn.disabled = true; btn.textContent = 'SAVING…';
+  try{
+    if(editingPhotoId !== null){
+      const p = allPhotos.find(x => x.id === editingPhotoId);
+      if(!p){
+        toast('That pic was deleted', true);
+      }else{
+        if(!sameDay(p.ts, base)){
+          const taken = new Set(allPhotos.filter(x => x.id !== p.id).map(x => x.ts));
+          p.ts = nextFreeTs(taken, base.getTime());
+          p.month = monthKey(new Date(p.ts));
+        }
+        p.pose = pose; p.note = note;
+        await dbPut('photos', p);
+        toast('Photo updated');
+      }
+    }else{
+      let saved = 0;
+      const taken = new Set(allPhotos.map(x => x.ts));
+      for(let i = 0; i < pendingFiles.length; i++){
+        try{
+          const {img, thumb} = await processImage(pendingFiles[i]);
+          const ts = nextFreeTs(taken, base.getTime());
+          await dbPut('photos', {ts, month: monthKey(new Date(ts)), pose, note, img, thumb});
+          saved++;
+        }catch(err){
+          toast('Skipped ' + (pendingFiles[i].name || 'file') + ' — could not read image', true);
+        }
+      }
+      if(saved) toast(saved + ' pic' + (saved>1?'s':'') + ' logged ✓');
+      ensurePersist();
+    }
+    pendingFiles = []; editingPhotoId = null;
+    closeOvl($('#metaSheet'));
+    await reloadData();
+    refreshUI();
+    if(viewer.open) closeViewer();
+  }catch(err){
+    toast('Save failed: ' + err.message, true);
+  }finally{
+    btn.disabled = false; btn.textContent = 'SAVE';
+  }
+});
+
+/* ============ fullscreen viewer ============ */
+let vFullURL = null;
+function openViewer(list, idx, kind){
+  viewer = {list, idx, kind, open: true};
+  openOvl($('#viewer'));
+  $('#vEdit').style.display = kind === 'photo' ? '' : 'none';
+  showViewerImg();
+}
+function showViewerImg(){
+  const rec = viewer.list[viewer.idx];
+  if(!rec){ closeViewer(); return; }
+  if(vFullURL) URL.revokeObjectURL(vFullURL);
+  vFullURL = URL.createObjectURL(rec.img);
+  $('#vImg').src = vFullURL;
+  if(viewer.kind === 'photo'){
+    $('#vCap').firstChild.textContent = POSES[rec.pose] + ' · ' + fmtDate(rec.ts);
+    $('#vSub').textContent = (rec.note || '') + '  (' + (viewer.idx+1) + '/' + viewer.list.length + ')';
+  }else{
+    $('#vCap').firstChild.textContent = 'SCAN · ' + fmtDate(rec.ts);
+    $('#vSub').textContent = '';
+  }
+}
+function closeViewer(){ closeOvl($('#viewer')); }
+$('#vClose').addEventListener('click', closeViewer);
+$('#vPrev').addEventListener('click', ()=>{ viewer.idx = (viewer.idx-1+viewer.list.length)%viewer.list.length; showViewerImg(); });
+$('#vNext').addEventListener('click', ()=>{ viewer.idx = (viewer.idx+1)%viewer.list.length; showViewerImg(); });
+(function(){
+  let x0 = null;
+  const w = $('#vImgWrap');
+  w.addEventListener('touchstart', e => x0 = e.touches[0].clientX, {passive:true});
+  w.addEventListener('touchend', e => {
+    if(x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if(Math.abs(dx) > 40) (dx < 0 ? $('#vNext') : $('#vPrev')).click();
+    x0 = null;
+  }, {passive:true});
+})();
+$('#vEdit').addEventListener('click', ()=>{
+  const rec = viewer.list[viewer.idx];
+  editingPhotoId = rec.id; pendingFiles = [];
+  $('#metaTitle').textContent = 'EDIT PIC';
+  const d = new Date(rec.ts);
+  $('#phDate').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  $('#phNote').value = rec.note || '';
+  setPose(rec.pose);
+  $('#addPrev').innerHTML = '<img src="'+thumbURL('p', rec)+'">';
+  openOvl($('#metaSheet'));
+});
+$('#vDelete').addEventListener('click', async ()=>{
+  const rec = viewer.list[viewer.idx];
+  const ok = await confirmBox('DELETE ' + (viewer.kind==='photo'?'PIC':'SCAN') + '?', 'This can\'t be undone. Gone for good.');
+  if(!ok) return;
+  if(viewer.kind === 'photo'){
+    await dbDel('photos', rec.id); dropThumbURL('p', rec.id);
+  }else{
+    await dbDel('scans', rec.id); dropThumbURL('s', rec.id);
+  }
+  await reloadData();
+  closeViewer();
+  refreshUI();
+  toast('Deleted');
+});
+
+/* ============ SCANS tab ============ */
+function resetScanForm(){
+  editingScanId = null; sheetBlob = null;
+  $('#scanFormTitle').textContent = 'NEW SCAN';
+  $('#scDate').value = todayStr();
+  ['scWeight','scBf','scMuscle','scVisc','scWater','scNote'].forEach(id => $('#'+id).value = '');
+  $('#scBmiOut').textContent = '—';
+  $('#sheetPrev').style.display = 'none';
+  $('#btnClearSheet').style.display = 'none';
+}
+$('#btnToggleScanForm').addEventListener('click', ()=>{
+  const w = $('#scanFormWrap');
+  if(w.classList.contains('closed')){ resetScanForm(); w.classList.remove('closed'); }
+  else w.classList.add('closed');
+});
+$('#btnCancelScan').addEventListener('click', ()=>{ $('#scanFormWrap').classList.add('closed'); resetScanForm(); });
+$('#scWeight').addEventListener('input', ()=>{
+  const v = parseFloat($('#scWeight').value);
+  const bmi = v ? calcBmi(inputToLb(v)) : null;
+  $('#scBmiOut').textContent = bmi ? bmi.toFixed(1) : '—';
+});
+$('#btnAttachSheet').addEventListener('click', ()=> $('#inSheet').click());
+$('#inSheet').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  try{
+    const {img, thumb} = await processImage(f);
+    sheetBlob = {img, thumb};
+    const pv = $('#sheetPrev');
+    pv.style.display = 'block';
+    pv.querySelector('img').src = URL.createObjectURL(thumb);
+    $('#btnClearSheet').style.display = '';
+  }catch(err){ toast('Could not read image', true); }
+  e.target.value = '';
+});
+$('#btnClearSheet').addEventListener('click', ()=>{
+  sheetBlob = null;
+  $('#sheetPrev').style.display = 'none';
+  $('#btnClearSheet').style.display = 'none';
+});
+$('#btnSaveScan').addEventListener('click', async ()=>{
+  const btn = $('#btnSaveScan');
+  if(btn.disabled) return;
+  const wIn = parseFloat($('#scWeight').value);
+  if(!wIn || wIn <= 0){ toast('Weight is required', true); return; }
+  const dateStr = $('#scDate').value || todayStr();
+  const base = new Date(dateStr + 'T12:00:00');
+  if(isNaN(base)){ toast('Bad date', true); return; }
+  btn.disabled = true; btn.textContent = 'SAVING…';
+  try{
+    const weightLb = r1(inputToLb(wIn));
+    const num = id => { const v = parseFloat($('#'+id).value); return isNaN(v) ? null : v; };
+    const rec = {
+      ts: base.getTime(), month: monthKey(base),
+      weightLb,
+      bodyFat: num('scBf'),
+      muscleLb: num('scMuscle') !== null ? r1(inputToLb(num('scMuscle'))) : null,
+      visceral: num('scVisc'),
+      waterPct: num('scWater'),
+      bmi: calcBmi(weightLb),
+      note: $('#scNote').value.trim(),
+      img: null, thumb: null,
+    };
+    if(editingScanId !== null){
+      const old = allScans.find(x => x.id === editingScanId);
+      if(!old){
+        toast('That scan was deleted', true);
+        $('#scanFormWrap').classList.add('closed');
+        resetScanForm();
+        return;
+      }
+      rec.id = editingScanId;
+      if(sameDay(old.ts, base)){
+        rec.ts = old.ts;
+      }else{
+        const taken = new Set(allScans.filter(x => x.id !== old.id).map(x => x.ts));
+        rec.ts = nextFreeTs(taken, base.getTime());
+      }
+      rec.month = monthKey(new Date(rec.ts));
+      if(sheetBlob){ rec.img = sheetBlob.img; rec.thumb = sheetBlob.thumb; dropThumbURL('s', rec.id); }
+      else { rec.img = old.img; rec.thumb = old.thumb; }
+    }else{
+      const taken = new Set(allScans.map(x => x.ts));
+      rec.ts = nextFreeTs(taken, rec.ts);
+      rec.month = monthKey(new Date(rec.ts));
+      if(sheetBlob){ rec.img = sheetBlob.img; rec.thumb = sheetBlob.thumb; }
+    }
+    await dbPut('scans', rec);
+    ensurePersist();
+    $('#scanFormWrap').classList.add('closed');
+    resetScanForm();
+    await reloadData();
+    refreshUI();
+    toast('Scan saved ✓');
+  }catch(err){
+    toast('Save failed: ' + err.message, true);
+  }finally{
+    btn.disabled = false; btn.textContent = 'SAVE SCAN';
+  }
+});
+function renderScans(){
+  $('#scanArea').style.display = scanView === 'scans' ? '' : 'none';
+  $('#tapeArea').style.display = scanView === 'tape' ? '' : 'none';
+  if(scanView === 'tape'){ renderTape(); return; }
+  $('#wUnit1').textContent = '(' + wUnit() + ')';
+  $('#wUnit2').textContent = '(' + wUnit() + ')';
+  $('#bmiHint').style.display = S.heightIn ? 'none' : '';
+  const el = $('#scansList');
+  if(!allScans.length){
+    el.innerHTML = '<div class="empty">NO SCANS YET<br><span style="font-size:10px;letter-spacing:1px">log your first body-comp scan above</span></div>';
+    return;
+  }
+  el.innerHTML = allScans.map((s, i) => {
+    const prev = allScans[i+1];
+    const d = prev ? dispW(s.weightLb) - dispW(prev.weightLb) : null;
+    const chips = [];
+    if(s.bodyFat != null) chips.push('BF<b>' + s.bodyFat.toFixed(1) + '%</b>');
+    if(s.muscleLb != null) chips.push('MUSCLE<b>' + dispW(s.muscleLb).toFixed(1) + '</b>');
+    if(s.bmi != null) chips.push('BMI<b>' + s.bmi.toFixed(1) + '</b>');
+    if(s.visceral != null) chips.push('VISC<b>' + s.visceral + '</b>');
+    if(s.waterPct != null) chips.push('H2O<b>' + s.waterPct.toFixed(1) + '%</b>');
+    return `<div class="card scan-card" data-id="${s.id}">
+      <div class="scan-top"><span class="d">${fmtDate(s.ts)}</span>
+        <span class="acts"><button data-act="edit">EDIT</button><button data-act="del">DEL</button></span></div>
+      <div class="scan-main">
+        <span class="w">${dispW(s.weightLb).toFixed(1)}<small>${wUnit()}</small></span>
+        ${d !== null ? '<span class="delta">' + (d >= 0 ? '▲ +' : '▼ ') + d.toFixed(1) + '</span>' : ''}
+        ${s.thumb ? '<span class="sthumb" data-act="view"><img src="' + thumbURL('s', s) + '" alt="scan sheet"></span>' : ''}
+      </div>
+      ${chips.length ? '<div class="scan-metrics">' + chips.map(c => '<span class="mchip">'+c+'</span>').join('') + '</div>' : ''}
+      ${s.note ? '<div class="scan-note">' + esc(s.note) + '</div>' : ''}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.scan-card').forEach(card => {
+    const id = +card.dataset.id;
+    card.querySelector('[data-act="edit"]').addEventListener('click', ()=> editScan(id));
+    card.querySelector('[data-act="del"]').addEventListener('click', async ()=>{
+      const ok = await confirmBox('DELETE SCAN?', 'This can\'t be undone.');
+      if(!ok) return;
+      if(editingScanId === id){ resetScanForm(); $('#scanFormWrap').classList.add('closed'); }
+      await dbDel('scans', id); dropThumbURL('s', id);
+      await reloadData(); refreshUI();
+      toast('Deleted');
+    });
+    const v = card.querySelector('[data-act="view"]');
+    if(v) v.addEventListener('click', ()=>{
+      const s = allScans.find(x => x.id === id);
+      openViewer([s], 0, 'scan');
+    });
+  });
+}
+function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML.replace(/"/g, '&quot;'); }
+function r2(v){ return Math.round(v*100)/100; }
+function dayKey(ts){ const d = new Date(ts); return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate(); }
+function editScan(id){
+  const s = allScans.find(x => x.id === id);
+  if(!s) return;
+  editingScanId = id; sheetBlob = null;
+  $('#scanFormTitle').textContent = 'EDIT SCAN';
+  const d = new Date(s.ts);
+  $('#scDate').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  $('#scWeight').value = dispW(s.weightLb);
+  $('#scBf').value = s.bodyFat ?? '';
+  $('#scMuscle').value = s.muscleLb != null ? dispW(s.muscleLb) : '';
+  $('#scVisc').value = s.visceral ?? '';
+  $('#scWater').value = s.waterPct ?? '';
+  $('#scNote').value = s.note || '';
+  $('#scBmiOut').textContent = s.bmi ? s.bmi.toFixed(1) : '—';
+  if(s.thumb){
+    const pv = $('#sheetPrev');
+    pv.style.display = 'block';
+    pv.querySelector('img').src = thumbURL('s', s);
+  }
+  $('#scanFormWrap').classList.remove('closed');
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+/* ============ TAPE (measurements) ============ */
+$('#segScans').addEventListener('click', ()=>{
+  scanView = 'scans';
+  $('#segScans').classList.add('active'); $('#segTape').classList.remove('active');
+  renderScans();
+});
+$('#segTape').addEventListener('click', ()=>{
+  scanView = 'tape';
+  $('#segTape').classList.add('active'); $('#segScans').classList.remove('active');
+  renderScans();
+});
+function lenUnit(){ return S.units === 'metric' ? 'CM' : 'IN'; }
+function dispLen(inches){ return S.units === 'metric' ? r1(inches*2.54) : r1(inches); }
+function inputToIn(v){ return S.units === 'metric' ? v/2.54 : v; }
+function resetTapeForm(){
+  editingTapeId = null;
+  $('#tapeFormTitle').textContent = 'NEW TAPE';
+  $('#tpDate').value = todayStr();
+  MEAS_FIELDS.forEach(([k]) => $('#tp' + k[0].toUpperCase() + k.slice(1)).value = '');
+}
+$('#btnToggleTapeForm').addEventListener('click', ()=>{
+  const w = $('#tapeFormWrap');
+  if(w.classList.contains('closed')){ resetTapeForm(); w.classList.remove('closed'); }
+  else w.classList.add('closed');
+});
+$('#btnCancelTape').addEventListener('click', ()=>{ $('#tapeFormWrap').classList.add('closed'); resetTapeForm(); });
+function tpInput(k){ return $('#tp' + k[0].toUpperCase() + k.slice(1)); }
+$('#btnSaveTape').addEventListener('click', async ()=>{
+  const btn = $('#btnSaveTape');
+  if(btn.disabled) return;
+  const dateStr = $('#tpDate').value || todayStr();
+  const base = new Date(dateStr + 'T12:00:00');
+  if(isNaN(base)){ toast('Bad date', true); return; }
+  const rec = {ts: base.getTime(), month: monthKey(base)};
+  let any = false;
+  for(const [k] of MEAS_FIELDS){
+    const v = parseFloat(tpInput(k).value);
+    rec[k] = isNaN(v) || v <= 0 ? null : r2(inputToIn(v));  // 2dp so small cm changes survive the in↔cm round trip
+    if(rec[k] != null) any = true;
+  }
+  if(!any){ toast('Enter at least one measurement', true); return; }
+  btn.disabled = true; btn.textContent = 'SAVING…';
+  try{
+    if(editingTapeId !== null){
+      const old = allMeasures.find(x => x.id === editingTapeId);
+      if(!old){
+        toast('That entry was deleted', true);
+        $('#tapeFormWrap').classList.add('closed'); resetTapeForm();
+        return;
+      }
+      rec.id = editingTapeId;
+      if(sameDay(old.ts, base)) rec.ts = old.ts;
+      else { const taken = new Set(allMeasures.filter(x => x.id !== old.id).map(x => x.ts)); rec.ts = nextFreeTs(taken, base.getTime()); }
+    }else{
+      const taken = new Set(allMeasures.map(x => x.ts));
+      rec.ts = nextFreeTs(taken, rec.ts);
+    }
+    rec.month = monthKey(new Date(rec.ts));
+    await dbPut('measures', rec);
+    ensurePersist();
+    $('#tapeFormWrap').classList.add('closed');
+    resetTapeForm();
+    await reloadData();
+    refreshUI();
+    toast('Tape saved ✓');
+  }catch(err){
+    toast('Save failed: ' + err.message, true);
+  }finally{
+    btn.disabled = false; btn.textContent = 'SAVE TAPE';
+  }
+});
+function renderTape(){
+  $$('#tapeArea .tpu').forEach(el => el.textContent = '(' + lenUnit() + ')');
+  const el = $('#tapeList');
+  if(!allMeasures.length){
+    el.innerHTML = '<div class="empty">NO TAPE ENTRIES YET<br><span style="font-size:10px;letter-spacing:1px">log waist, chest, arms above — monthly is plenty</span></div>';
+    return;
+  }
+  el.innerHTML = allMeasures.map((m, i) => {
+    const prev = allMeasures[i+1];
+    const chips = MEAS_FIELDS.filter(([k]) => m[k] != null).map(([k, label]) => {
+      const d = prev && prev[k] != null ? dispLen(m[k]) - dispLen(prev[k]) : null;
+      const delta = d !== null && Math.abs(d) >= 0.05 ? ' <span style="color:var(--amber)">' + (d > 0 ? '▲' : '▼') + Math.abs(d).toFixed(1) + '</span>' : '';
+      return '<span class="mchip">' + label + '<b>' + dispLen(m[k]).toFixed(1) + '</b>' + delta + '</span>';
+    }).join('');
+    return `<div class="card scan-card" data-id="${m.id}">
+      <div class="scan-top"><span class="d">${fmtDate(m.ts)}</span>
+        <span class="acts"><button data-act="edit">EDIT</button><button data-act="del">DEL</button></span></div>
+      <div class="scan-metrics">${chips}</div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.scan-card').forEach(card => {
+    const id = +card.dataset.id;
+    card.querySelector('[data-act="edit"]').addEventListener('click', ()=>{
+      const m = allMeasures.find(x => x.id === id);
+      if(!m) return;
+      editingTapeId = id;
+      $('#tapeFormTitle').textContent = 'EDIT TAPE';
+      const d = new Date(m.ts);
+      $('#tpDate').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      for(const [k] of MEAS_FIELDS) tpInput(k).value = m[k] != null ? dispLen(m[k]) : '';
+      $('#tapeFormWrap').classList.remove('closed');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', async ()=>{
+      const ok = await confirmBox('DELETE TAPE ENTRY?', 'This can\'t be undone.');
+      if(!ok) return;
+      if(editingTapeId === id){ resetTapeForm(); $('#tapeFormWrap').classList.add('closed'); }
+      await dbDel('measures', id);
+      await reloadData(); refreshUI();
+      toast('Deleted');
+    });
+  });
+}
+
+/* ============ LIFTS tab ============ */
+const BIG4 = ['BENCH','SQUAT','DEADLIFT','OHP'];
+function epley(w, reps){ return reps <= 1 ? w : w * (1 + reps/30); }
+function liftE1(l){ return l.e1rmLb != null ? l.e1rmLb : epley(l.weightLb, l.reps); }
+function resetLiftForm(){
+  editingLiftId = null;
+  $('#liftFormTitle').textContent = 'LOG LIFT';
+  $('#lfDate').value = todayStr();
+  $('#lfWeight').value = ''; $('#lfReps').value = ''; $('#lfOther').value = '';
+  $('#lfEx').value = 'BENCH'; $('#lfOtherWrap').style.display = 'none';
+  $('#lfE1Out').textContent = '—';
+}
+$('#btnToggleLiftForm').addEventListener('click', ()=>{
+  const w = $('#liftFormWrap');
+  if(w.classList.contains('closed')){ resetLiftForm(); w.classList.remove('closed'); }
+  else w.classList.add('closed');
+});
+$('#btnCancelLift').addEventListener('click', ()=>{ $('#liftFormWrap').classList.add('closed'); resetLiftForm(); });
+$('#lfEx').addEventListener('change', ()=>{
+  $('#lfOtherWrap').style.display = $('#lfEx').value === '__other' ? '' : 'none';
+});
+function updE1Preview(){
+  const w = parseFloat($('#lfWeight').value), r = parseInt($('#lfReps').value, 10);
+  $('#lfE1Out').textContent = (w > 0 && r >= 1) ? r1(epley(w, r)).toFixed(1) : '—';
+}
+$('#lfWeight').addEventListener('input', updE1Preview);
+$('#lfReps').addEventListener('input', updE1Preview);
+$('#btnSaveLift').addEventListener('click', async ()=>{
+  const btn = $('#btnSaveLift');
+  if(btn.disabled) return;
+  const sel = $('#lfEx').value;
+  const exercise = (sel === '__other' ? $('#lfOther').value : sel).trim().toUpperCase();
+  if(!exercise){ toast('Name the exercise', true); return; }
+  const wIn = parseFloat($('#lfWeight').value);
+  const reps = parseInt($('#lfReps').value, 10);
+  if(!wIn || wIn <= 0){ toast('Weight is required', true); return; }
+  if(!reps || reps < 1){ toast('Reps required (1+)', true); return; }
+  const dateStr = $('#lfDate').value || todayStr();
+  const base = new Date(dateStr + 'T12:00:00');
+  if(isNaN(base)){ toast('Bad date', true); return; }
+  btn.disabled = true; btn.textContent = 'SAVING…';
+  try{
+    const weightLb = r1(inputToLb(wIn));
+    const rec = {ts: base.getTime(), month: monthKey(base), exercise, weightLb, reps,
+                 e1rmLb: r1(epley(weightLb, reps))};
+    if(editingLiftId !== null){
+      const old = allLifts.find(x => x.id === editingLiftId);
+      if(!old){
+        toast('That lift was deleted', true);
+        $('#liftFormWrap').classList.add('closed'); resetLiftForm();
+        return;
+      }
+      rec.id = editingLiftId;
+      // untouched weight/reps must not drift through display rounding and mint a false PR
+      if(wIn === dispW(old.weightLb) && reps === old.reps){
+        rec.weightLb = old.weightLb;
+        rec.e1rmLb = old.e1rmLb ?? rec.e1rmLb;
+      }
+      if(sameDay(old.ts, base)) rec.ts = old.ts;
+      else { const taken = new Set(allLifts.filter(x => x.id !== old.id).map(x => x.ts)); rec.ts = nextFreeTs(taken, base.getTime()); }
+    }else{
+      const taken = new Set(allLifts.map(x => x.ts));
+      rec.ts = nextFreeTs(taken, rec.ts);
+    }
+    rec.month = monthKey(new Date(rec.ts));
+    const prevBest = Math.max(0, ...allLifts.filter(l => l.exercise === exercise && l.id !== rec.id).map(liftE1));
+    await dbPut('lifts', rec);
+    ensurePersist();
+    $('#liftFormWrap').classList.add('closed');
+    resetLiftForm();
+    await reloadData();
+    refreshUI();
+    toast(rec.e1rmLb > prevBest && prevBest > 0 ? 'NEW ' + exercise + ' PR ✦' : 'Lift logged ✓');
+  }catch(err){
+    toast('Save failed: ' + err.message, true);
+  }finally{
+    btn.disabled = false; btn.textContent = 'SAVE LIFT';
+  }
+});
+function liftExercises(){
+  const present = [...new Set(allLifts.map(l => l.exercise))];
+  return [...BIG4.filter(e => present.includes(e)), ...present.filter(e => !BIG4.includes(e)).sort()];
+}
+function renderLifts(){
+  $('#wUnit3').textContent = '(' + wUnit() + ')';
+  const exs = liftExercises();
+  if(liftFilter !== 'ALL' && !exs.includes(liftFilter)) liftFilter = 'ALL';
+  const chips = $('#liftChips');
+  chips.innerHTML = ['ALL', ...exs].map(e =>
+    `<button data-ex="${esc(e)}" class="${liftFilter === e ? 'on-a' : ''}">${esc(e)}</button>`).join('');
+  chips.querySelectorAll('button').forEach(b => b.addEventListener('click', ()=>{
+    liftFilter = b.dataset.ex; renderLifts();
+  }));
+  const head = $('#liftHead');
+  if(!allLifts.length){
+    head.innerHTML = '';
+    $('#liftList').innerHTML = '<div class="empty">NO LIFTS YET<br><span style="font-size:10px;letter-spacing:1px">log a set — PRs and 1RM trends show up here</span></div>';
+    return;
+  }
+  // best e1RM per exercise, computed once
+  const best = {};
+  for(const l of allLifts){ const e = liftE1(l); if(!(l.exercise in best) || e > best[l.exercise]) best[l.exercise] = e; }
+  if(liftFilter === 'ALL'){
+    head.innerHTML = '<div class="tiles">' + exs.slice(0, 6).map(e =>
+      `<div class="tile"><div class="v">${dispW(best[e]).toFixed(0)}</div><div class="l">${esc(e)} E1RM</div></div>`).join('') + '</div>';
+  }else{
+    const data = [...allLifts].filter(l => l.exercise === liftFilter).sort((a,b)=>a.ts-b.ts)
+      .map(l => ({ts: l.ts, v: S.units === 'metric' ? liftE1(l)*0.45359237 : liftE1(l)}));
+    head.innerHTML = `<div class="card chart-card">
+      <div class="chart-head"><span class="t"><i style="background:${LIFT_COLOR}"></i>${esc(liftFilter)} · EST 1RM</span>
+      <span class="cur">${data.length ? data[data.length-1].v.toFixed(1) : '—'}<small>${wUnit().toLowerCase()}</small></span></div>
+      <div class="chart-box"></div></div>`;
+    drawChart(head.querySelector('.chart-box'), data, {key:'lift', color: LIFT_COLOR, unit: ()=>wUnit().toLowerCase()});
+  }
+  const list = liftFilter === 'ALL' ? allLifts : allLifts.filter(l => l.exercise === liftFilter);
+  $('#liftList').innerHTML = list.map(l => {
+    const e1 = liftE1(l);
+    const isPR = !allLifts.some(o => o.exercise === l.exercise && o.ts < l.ts && liftE1(o) >= e1) &&
+                 allLifts.some(o => o.exercise === l.exercise && o.ts < l.ts);
+    return `<div class="card lift-card" data-id="${l.id}">
+      <div class="top"><span class="ex">${esc(l.exercise)}</span><span class="d">${fmtDate(l.ts)}</span>
+        ${isPR ? '<span class="pr-badge">PR ✦</span>' : ''}
+        <span class="acts"><button data-act="edit">EDIT</button><button data-act="del">DEL</button></span></div>
+      <div class="main"><span class="wxr">${dispW(l.weightLb).toFixed(1)}<small>${wUnit()}</small> × ${l.reps}</span>
+        <span class="e1">E1RM <b>${dispW(e1).toFixed(1)}</b></span></div>
+    </div>`;
+  }).join('');
+  $('#liftList').querySelectorAll('.lift-card').forEach(card => {
+    const id = +card.dataset.id;
+    card.querySelector('[data-act="edit"]').addEventListener('click', ()=>{
+      const l = allLifts.find(x => x.id === id);
+      if(!l) return;
+      editingLiftId = id;
+      $('#liftFormTitle').textContent = 'EDIT LIFT';
+      const known = ['BENCH','SQUAT','DEADLIFT','OHP','ROW'];
+      if(known.includes(l.exercise)){ $('#lfEx').value = l.exercise; $('#lfOtherWrap').style.display = 'none'; }
+      else { $('#lfEx').value = '__other'; $('#lfOther').value = l.exercise; $('#lfOtherWrap').style.display = ''; }
+      const d = new Date(l.ts);
+      $('#lfDate').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      $('#lfWeight').value = dispW(l.weightLb);
+      $('#lfReps').value = l.reps;
+      updE1Preview();
+      $('#liftFormWrap').classList.remove('closed');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+    card.querySelector('[data-act="del"]').addEventListener('click', async ()=>{
+      const ok = await confirmBox('DELETE LIFT?', 'This can\'t be undone.');
+      if(!ok) return;
+      if(editingLiftId === id){ resetLiftForm(); $('#liftFormWrap').classList.add('closed'); }
+      await dbDel('lifts', id);
+      await reloadData(); refreshUI();
+      toast('Deleted');
+    });
+  });
+}
+
+/* ============ COMPARE tab ============ */
+function allMonths(){
+  const set = new Set([...allPhotos.map(p => p.month), ...allScans.map(s => s.month)]);
+  return [...set].sort();  // ascending
+}
+function renderCompare(){
+  const months = allMonths();
+  const bodyEl = $('#cmpBody'), statsEl = $('#cmpStats');
+  if(months.length < 1){
+    $('#chipsA').innerHTML = ''; $('#chipsB').innerHTML = '';
+    bodyEl.innerHTML = '<div class="empty">NOTHING TO COMPARE YET<br><span style="font-size:10px;letter-spacing:1px">log pics or scans first</span></div>';
+    statsEl.innerHTML = '';
+    return;
+  }
+  if(!cmp.a || !months.includes(cmp.a)) { cmp.a = months[0]; cmp.ai = 0; }
+  if(!cmp.b || !months.includes(cmp.b)) { cmp.b = months[months.length-1]; cmp.bi = 0; }
+  for(const side of ['a','b']){
+    const wrap = $(side === 'a' ? '#chipsA' : '#chipsB');
+    wrap.innerHTML = months.map(mk =>
+      `<button data-mk="${mk}" class="${cmp[side]===mk ? 'on-'+side : ''}">${monthLabel(mk)}</button>`).join('');
+    wrap.querySelectorAll('button').forEach(b => b.addEventListener('click', ()=>{
+      cmp[side] = b.dataset.mk;
+      cmp[side+'i'] = 0;
+      renderCompare();
+    }));
+    const sel = wrap.querySelector('.on-'+side);
+    if(sel) sel.scrollIntoView({block:'nearest', inline:'center'});
+  }
+  const pa = allPhotos.filter(p => p.month === cmp.a).sort((x,y)=>x.ts-y.ts);
+  const pb = allPhotos.filter(p => p.month === cmp.b).sort((x,y)=>x.ts-y.ts);
+  cmp.ai = Math.min(cmp.ai, Math.max(0, pa.length-1));
+  cmp.bi = Math.min(cmp.bi, Math.max(0, pb.length-1));
+  if(cmp.mode === 'side') renderSideBySide(bodyEl, pa, pb);
+  else renderSlider(bodyEl, pa, pb);
+  renderCmpStats(statsEl);
+}
+function paneHTML(side, list, idx){
+  const rec = list[idx];
+  const tag = `<span class="abtag ${side}">${side.toUpperCase()}</span>`;
+  if(!rec) return `<div class="pane"><div class="nophoto">NO PICS IN ${monthLabel(cmp[side])}</div>
+    <span class="cap">${tag} ${monthLabel(cmp[side])}</span></div>`;
+  const multi = list.length > 1;
+  const dots = multi
+    ? '<span class="dots">' + list.map((_,i)=>'<i class="'+(i===idx?'on':'')+'"></i>').join('') + '</span>' : '';
+  const arrows = multi
+    ? '<button class="parrow l" data-d="-1" aria-label="prev">‹</button><button class="parrow r" data-d="1" aria-label="next">›</button>' : '';
+  return `<div class="pane" data-side="${side}">
+    <img src="${imgURL('p', rec)}" alt="${side} ${POSES[rec.pose]}" draggable="false">
+    ${dots}
+    ${arrows}
+    <span class="cap">${tag} ${POSES[rec.pose]} · ${fmtDay(rec.ts)}</span>
+  </div>`;
+}
+function renderSideBySide(el, pa, pb){
+  el.innerHTML = '<div class="cmp-side">' + paneHTML('a', pa, cmp.ai) + paneHTML('b', pb, cmp.bi) + '</div>';
+  el.querySelectorAll('.pane[data-side]').forEach(pane => {
+    const side = pane.dataset.side;
+    pane.querySelectorAll('.parrow').forEach(btn => btn.addEventListener('click', ()=>{
+      const list = side === 'a' ? pa : pb;
+      if(list.length < 2) return;
+      cmp[side+'i'] = (cmp[side+'i'] + (+btn.dataset.d) + list.length) % list.length;
+      // pose-sync the other side
+      const other = side === 'a' ? 'b' : 'a';
+      const otherList = other === 'a' ? pa : pb;
+      const pose = list[cmp[side+'i']].pose;
+      const j = otherList.findIndex(p => p.pose === pose);
+      if(j >= 0 && otherList[cmp[other+'i']] && otherList[cmp[other+'i']].pose !== pose) cmp[other+'i'] = j;
+      renderCompare();
+    }));
+    pane.addEventListener('click', e => {
+      if(e.target.closest('.parrow')) return;
+      const list = side === 'a' ? pa : pb;
+      const rec = list[cmp[side+'i']];
+      if(rec){
+        openViewer(list, cmp[side+'i'], 'photo');
+      }
+    });
+  });
+}
+function renderSlider(el, pa, pb){
+  const a = pa[cmp.ai], b = pb[cmp.bi];
+  if(!a || !b){
+    el.innerHTML = '<div class="empty">SLIDER NEEDS A PIC IN BOTH MONTHS</div>';
+    return;
+  }
+  el.innerHTML = `<div class="slider-wrap" id="sliderWrap">
+      <img src="${imgURL('p', a)}" alt="A ${POSES[a.pose]}" draggable="false">
+      <img class="top-img" id="topImg" src="${imgURL('p', b)}" alt="B ${POSES[b.pose]}" draggable="false">
+      <div class="slider-handle" id="sliderHandle"></div>
+      <span class="slider-tag a">A · ${monthLabel(cmp.a)}</span>
+      <span class="slider-tag b">B · ${monthLabel(cmp.b)}</span>
+    </div>
+    <div class="cmp-note">drag the handle · A ${POSES[a.pose]} ${fmtDay(a.ts)} vs B ${POSES[b.pose]} ${fmtDay(b.ts)}</div>`;
+  const wrap = $('#sliderWrap'), top = $('#topImg'), handle = $('#sliderHandle');
+  function setX(clientX){
+    const r = wrap.getBoundingClientRect();
+    let pct = (clientX - r.left) / r.width * 100;
+    pct = Math.max(2, Math.min(98, pct));
+    top.style.clipPath = 'inset(0 0 0 ' + pct + '%)';
+    handle.style.left = pct + '%';
+  }
+  wrap.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try{ wrap.setPointerCapture(e.pointerId); }catch(err){}
+    setX(e.clientX);
+    const mv = ev => setX(ev.clientX);
+    const end = ()=>{
+      wrap.removeEventListener('pointermove', mv);
+      wrap.removeEventListener('pointerup', end);
+      wrap.removeEventListener('pointercancel', end);
+      wrap.removeEventListener('lostpointercapture', end);
+    };
+    wrap.addEventListener('pointermove', mv);
+    wrap.addEventListener('pointerup', end);
+    wrap.addEventListener('pointercancel', end);
+    wrap.addEventListener('lostpointercapture', end);
+  });
+}
+$('#modeSide').addEventListener('click', ()=>{ cmp.mode = 'side'; $('#modeSide').classList.add('active'); $('#modeSlider').classList.remove('active'); renderCompare(); });
+$('#modeSlider').addEventListener('click', ()=>{ cmp.mode = 'slider'; $('#modeSlider').classList.add('active'); $('#modeSide').classList.remove('active'); renderCompare(); });
+function latestScanIn(mk){
+  return allScans.find(s => s.month === mk) || null; // allScans is ts desc → first hit = latest
+}
+function latestMeasureIn(mk){
+  return allMeasures.find(m => m.month === mk) || null;
+}
+function renderCmpStats(el){
+  const sa = latestScanIn(cmp.a), sb = latestScanIn(cmp.b);
+  const ma = latestMeasureIn(cmp.a), mb = latestMeasureIn(cmp.b);
+  if(!sa && !sb && !ma && !mb){ el.innerHTML = ''; return; }
+  const rows = [
+    ['WEIGHT ' + wUnit(), s => s.weightLb != null ? dispW(s.weightLb).toFixed(1) : null],
+    ['BODY FAT %', s => s.bodyFat != null ? s.bodyFat.toFixed(1) : null],
+    ['MUSCLE ' + wUnit(), s => s.muscleLb != null ? dispW(s.muscleLb).toFixed(1) : null],
+    ['BMI', s => s.bmi != null ? s.bmi.toFixed(1) : null],
+  ];
+  let html = '<div class="card"><table><tr><th>STATS</th><th>A</th><th>B</th><th>Δ</th></tr>';
+  const row = (label, va, vb) => {
+    if(va === null && vb === null) return '';
+    const dl = (va !== null && vb !== null) ? (parseFloat(vb) - parseFloat(va)) : null;
+    return `<tr><td>${label}</td><td>${va ?? '—'}</td><td>${vb ?? '—'}</td>
+      <td class="dl">${dl !== null ? (dl >= 0 ? '+' : '') + dl.toFixed(1) : '—'}</td></tr>`;
+  };
+  for(const [label, get] of rows) html += row(label, sa ? get(sa) : null, sb ? get(sb) : null);
+  for(const [k, label] of MEAS_FIELDS)
+    html += row(label + ' ' + lenUnit(),
+      ma && ma[k] != null ? dispLen(ma[k]).toFixed(1) : null,
+      mb && mb[k] != null ? dispLen(mb[k]).toFixed(1) : null);
+  html += '</table>';
+  const notes = [];
+  if(sa || sb) notes.push(`scans A ${sa ? fmtDate(sa.ts) : '—'} · B ${sb ? fmtDate(sb.ts) : '—'}`);
+  if(ma || mb) notes.push(`tape A ${ma ? fmtDate(ma.ts) : '—'} · B ${mb ? fmtDate(mb.ts) : '—'}`);
+  html += `<div class="cmp-note">latest of each month · ${notes.join(' · ')}</div></div>`;
+  el.innerHTML = html;
+}
+
+/* ============ TRENDS tab ============ */
+$$('#rangeChips button').forEach(b => b.addEventListener('click', ()=>{
+  range = +b.dataset.r;
+  $$('#rangeChips button').forEach(x => x.classList.toggle('active', x === b));
+  renderTrends();
+}));
+function renderTrends(){
+  const latest = allScans[0];
+  const bfScan = allScans.find(s => s.bodyFat != null);
+  let ffmi = null;
+  if(S.heightIn && bfScan){
+    const leanKg = bfScan.weightLb * 0.45359237 * (1 - bfScan.bodyFat/100);
+    const hM = S.heightIn * 0.0254;
+    ffmi = leanKg / (hM * hM);
+  }
+  const tiles = [
+    {v: latest ? dispW(latest.weightLb).toFixed(1) : '—', l: 'WEIGHT ' + wUnit()},
+    {v: latest && latest.bodyFat != null ? latest.bodyFat.toFixed(1) : '—', l: 'BODY FAT %'},
+    {v: latest && latest.bmi != null ? latest.bmi.toFixed(1) : '—', l: 'BMI'},
+    {v: ffmi !== null ? ffmi.toFixed(1) : '—', l: 'FFMI'},
+    {v: latest && latest.muscleLb != null ? dispW(latest.muscleLb).toFixed(1) : '—', l: 'MUSCLE ' + wUnit()},
+    {v: String(allPhotos.length), l: 'PICS LOGGED'},
+  ];
+  $('#tiles').innerHTML = tiles.map(t => `<div class="tile"><div class="v">${t.v}</div><div class="l">${t.l}</div></div>`).join('');
+  const wrap = $('#charts');
+  wrap.innerHTML = '';
+  const cutoff = range ? Date.now() - range*86400000 : 0;
+  const asc = [...allScans].sort((a,b)=>a.ts-b.ts);
+  const addChart = (cfg, data, extras) => {
+    const card = document.createElement('div');
+    card.className = 'card chart-card';
+    const cur = data.length ? data[data.length-1].v : null;
+    card.innerHTML = `<div class="chart-head">
+        <span class="t"><i style="background:${cfg.color}"></i>${cfg.title}</span>
+        <span class="cur">${cur !== null ? cur.toFixed(1) : '—'}<small>${cfg.unit()}</small></span></div>
+      <div class="chart-box"></div>`;
+    wrap.appendChild(card);
+    drawChart(card.querySelector('.chart-box'), data, cfg, extras);
+  };
+  for(const cfg of CHARTS){
+    const data = asc.filter(s => s.ts >= cutoff && s[cfg.key] != null)
+                    .map(s => ({ts: s.ts, v: cfg.conv(s[cfg.key])}));
+    const extras = {marks: cfg.key === 'muscleLb' ? [] : S.marks};
+    if(cfg.key === 'weightLb' && S.goalWeightLb != null) extras.goal = cfg.conv(S.goalWeightLb);
+    if(cfg.key === 'bodyFat' && S.goalBf != null) extras.goal = S.goalBf;
+    addChart(cfg, data, extras);
+  }
+  if(allMeasures.some(m => m.waist != null)){
+    const wd = [...allMeasures].sort((a,b)=>a.ts-b.ts)
+      .filter(m => m.ts >= cutoff && m.waist != null)
+      .map(m => ({ts: m.ts, v: dispLen(m.waist)}));
+    addChart({key:'waist', title:'WAIST', color: WAIST_COLOR, unit: ()=>lenUnit().toLowerCase()}, wd, {});
+  }
+}
+function niceTicks(min, max){
+  if(min === max){ min -= 1; max += 1; }
+  const span = max - min, step = Math.pow(10, Math.floor(Math.log10(span/3)));
+  const err = span/3/step;
+  const mult = err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
+  const s = step*mult;
+  const lo = Math.floor(min/s)*s, hi = Math.ceil(max/s)*s;
+  const t = [];
+  for(let v = lo; v <= hi + 1e-9; v += s) t.push(r1(v*10)/10 ? +v.toFixed(2) : +v.toFixed(2));
+  return t;
+}
+function drawChart(box, data, cfg, extras = {}){
+  if(data.length < 2){
+    box.innerHTML = '<div class="empty" style="margin:0;padding:26px 12px">NEED 2+ ENTRIES FOR A TREND</div>';
+    return;
+  }
+  const W = Math.max(280, box.clientWidth || 320), H = 150;
+  const padL = 6, padR = 10, padT = 16, padB = 20;
+  const xs = data.map(d => d.ts);
+  const ys = data.map(d => d.v).concat(extras.goal != null ? [extras.goal] : []);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const yPad = (yMax - yMin) * 0.15 || 1;
+  yMin -= yPad; yMax += yPad;
+  const ticks = niceTicks(yMin, yMax);
+  yMin = ticks[0]; yMax = ticks[ticks.length-1];
+  const X = ts => padL + (ts - x0)/(x1 - x0 || 1) * (W - padL - padR);
+  const Y = v => padT + (yMax - v)/(yMax - yMin || 1) * (H - padT - padB);
+  const pts = data.map(d => X(d.ts).toFixed(1) + ',' + Y(d.v).toFixed(1)).join(' ');
+  const gid = 'g' + cfg.key;
+  // x labels: first, middle, last
+  const xlabPts = [data[0], data[Math.floor((data.length-1)/2)], data[data.length-1]]
+    .filter((d,i,arr) => arr.indexOf(d) === i);
+  const xlab = xlabPts.map((d,i) => {
+    const anchor = i === 0 ? 'start' : i === xlabPts.length-1 ? 'end' : 'middle';
+    return `<text x="${X(d.ts).toFixed(1)}" y="${H-5}" font-size="9" fill="#5b6069" text-anchor="${anchor}" letter-spacing="1">${fmtDay(d.ts)}</text>`;
+  }).join('');
+  const grid = ticks.map(t =>
+    `<line x1="${padL}" x2="${W-padR}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}" stroke="#262a31" stroke-width="1"/>
+     <text x="${padL}" y="${(Y(t)-3).toFixed(1)}" font-size="8.5" fill="#5b6069">${t}</text>`).join('');
+  let goalLine = '';
+  if(extras.goal != null){
+    const gy = Y(extras.goal).toFixed(1);
+    goalLine = `<line x1="${padL}" x2="${W-padR}" y1="${gy}" y2="${gy}" stroke="#c97e00" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="${W-padR}" y="${(Y(extras.goal)-4).toFixed(1)}" font-size="8.5" fill="#8a8f98" text-anchor="end" letter-spacing="1">GOAL ${extras.goal}</text>`;
+  }
+  let markLines = '';
+  for(const m of (extras.marks || [])){
+    if(m.ts < x0 || m.ts > x1) continue;
+    const mx = X(m.ts);
+    const lbl = esc(String(m.label || '').slice(0, 10).toUpperCase());
+    const nearRight = mx > W * 0.72;
+    markLines += `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${padT}" y2="${H-padB}" stroke="#5b6069" stroke-width="1" stroke-dasharray="2 3"/>
+      <text x="${(nearRight ? mx - 3 : mx + 3).toFixed(1)}" y="${padT - 5}" font-size="8" fill="#8a8f98" letter-spacing="1" text-anchor="${nearRight ? 'end' : 'start'}">${lbl}${m.kind === 'stop' ? ' ✕' : ''}</text>`;
+  }
+  const last = data[data.length-1];
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${cfg.color}" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="${cfg.color}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}${goalLine}${markLines}
+    <polygon points="${pts} ${X(last.ts).toFixed(1)},${Y(yMin).toFixed(1)} ${X(data[0].ts).toFixed(1)},${Y(yMin).toFixed(1)}" fill="url(#${gid})"/>
+    <polyline points="${pts}" fill="none" stroke="${cfg.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${X(last.ts).toFixed(1)}" cy="${Y(last.v).toFixed(1)}" r="3.5" fill="${cfg.color}" stroke="#191c21" stroke-width="1.5"/>
+    ${xlab}
+    <line id="xh-${gid}" y1="${padT}" y2="${H-padB}" stroke="#8a8f98" stroke-width="1" stroke-dasharray="2 3" visibility="hidden"/>
+    <circle id="xhc-${gid}" r="4" fill="${cfg.color}" stroke="#e9e6df" stroke-width="1.5" visibility="hidden"/>
+  </svg><div class="tooltip"></div>`;
+  const svg = box.querySelector('svg'), tip = box.querySelector('.tooltip');
+  const xh = svg.querySelector('#xh-'+gid), xhc = svg.querySelector('#xhc-'+gid);
+  function onMove(clientX){
+    const r = svg.getBoundingClientRect();
+    const mx = (clientX - r.left) / r.width * W;
+    let best = 0, bd = 1e18;
+    data.forEach((d,i)=>{ const dd = Math.abs(X(d.ts)-mx); if(dd < bd){ bd = dd; best = i; } });
+    const d = data[best], px = X(d.ts), py = Y(d.v);
+    xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.setAttribute('visibility','visible');
+    xhc.setAttribute('cx', px); xhc.setAttribute('cy', py); xhc.setAttribute('visibility','visible');
+    tip.innerHTML = '<span class="tt-d">'+fmtDate(d.ts)+'</span><br><b>'+d.v.toFixed(1)+'</b> '+cfg.unit();
+    tip.style.display = 'block';
+    const bw = box.clientWidth, tw = tip.offsetWidth;
+    let lx = px/W*bw - tw/2;
+    lx = Math.max(0, Math.min(bw-tw, lx));
+    tip.style.left = lx + 'px';
+    tip.style.top = (py/H*svg.getBoundingClientRect().height - tip.offsetHeight - 10) + 'px';
+  }
+  function hide(){ xh.setAttribute('visibility','hidden'); xhc.setAttribute('visibility','hidden'); tip.style.display = 'none'; }
+  svg.addEventListener('pointermove', e => onMove(e.clientX));
+  svg.addEventListener('pointerdown', e => onMove(e.clientX));
+  svg.addEventListener('pointerleave', hide);
+}
+
+/* ============ settings ============ */
+$('#btnSettings').addEventListener('click', ()=>{
+  $$('#unitSeg button').forEach(b => b.classList.toggle('on', b.dataset.u === S.units));
+  syncHeightRows();
+  if(S.heightIn){
+    $('#hFt').value = Math.floor(S.heightIn/12);
+    $('#hIn').value = Math.round(S.heightIn%12);
+    $('#hCm').value = Math.round(S.heightIn*2.54);
+  }
+  $('#goalW').value = S.goalWeightLb != null ? dispW(S.goalWeightLb) : '';
+  $('#goalBf').value = S.goalBf != null ? S.goalBf : '';
+  $('#goalWU').textContent = wUnit().toLowerCase();
+  $('#mkDate').value = todayStr();
+  renderMarks();
+  updateStorageNote();
+  openOvl($('#setSheet'));
+});
+$('#goalW').addEventListener('change', ()=>{
+  const v = parseFloat($('#goalW').value);
+  S.goalWeightLb = v > 0 ? r1(inputToLb(v)) : null;
+  saveSettings();
+});
+$('#goalBf').addEventListener('change', ()=>{
+  const v = parseFloat($('#goalBf').value);
+  S.goalBf = v > 0 ? r1(v) : null;
+  saveSettings();
+});
+/* cycle marks */
+function renderMarks(){
+  const el = $('#marksList');
+  if(!S.marks.length){ el.innerHTML = '<div class="storage-note" style="padding:6px 0">no marks yet — e.g. "TEST-E" start / stop</div>'; return; }
+  el.innerHTML = [...S.marks].sort((a,b)=>a.ts-b.ts).map((m, i) =>
+    `<div class="mark-row"><span class="k ${m.kind}">${m.kind === 'start' ? 'START' : 'STOP'}</span>
+     <span class="lb">${esc(m.label)}</span><span class="dt">${fmtDate(m.ts)}</span>
+     <button class="x" data-ts="${m.ts}" aria-label="Remove">✕</button></div>`).join('');
+  el.querySelectorAll('.x').forEach(b => b.addEventListener('click', ()=>{
+    S.marks = S.marks.filter(m => m.ts !== +b.dataset.ts);
+    saveSettings(); renderMarks();
+  }));
+}
+$$('#mkKind button').forEach(b => b.addEventListener('click', ()=>{
+  $$('#mkKind button').forEach(x => x.classList.toggle('on', x === b));
+}));
+$('#mkAdd').addEventListener('click', ()=>{
+  const label = $('#mkLabel').value.trim();
+  if(!label){ toast('Label the mark', true); return; }
+  const dateStr = $('#mkDate').value || todayStr();
+  const base = new Date(dateStr + 'T12:00:00');
+  if(isNaN(base)){ toast('Bad date', true); return; }
+  let ts = base.getTime();
+  while(S.marks.some(m => m.ts === ts)) ts++;
+  S.marks.push({ts, label, kind: $('#mkKind button.on').dataset.k});
+  saveSettings();
+  $('#mkLabel').value = '';
+  renderMarks();
+  toast('Mark added ✓');
+});
+function syncHeightRows(){
+  $('#rowHeightUs').style.display = S.units === 'us' ? '' : 'none';
+  $('#rowHeightM').style.display = S.units === 'metric' ? '' : 'none';
+}
+$$('#unitSeg button').forEach(b => b.addEventListener('click', ()=>{
+  S.units = b.dataset.u;
+  saveSettings();
+  $$('#unitSeg button').forEach(x => x.classList.toggle('on', x === b));
+  syncHeightRows();
+  if(S.heightIn){
+    $('#hFt').value = Math.floor(S.heightIn/12);
+    $('#hIn').value = Math.round(S.heightIn%12);
+    $('#hCm').value = Math.round(S.heightIn*2.54);
+  }
+  // goal field shows display units — re-render it for the new unit or the next edit mis-stores
+  $('#goalW').value = S.goalWeightLb != null ? dispW(S.goalWeightLb) : '';
+  $('#goalWU').textContent = wUnit().toLowerCase();
+}));
+function commitHeight(){
+  if(S.units === 'us'){
+    const ft = parseFloat($('#hFt').value), inch = parseFloat($('#hIn').value) || 0;
+    S.heightIn = ft ? ft*12 + inch : null;
+  }else{
+    const cm = parseFloat($('#hCm').value);
+    S.heightIn = cm ? cm/2.54 : null;
+  }
+  saveSettings();
+}
+['hFt','hIn','hCm'].forEach(id => $('#'+id).addEventListener('change', commitHeight));
+async function updateStorageNote(){
+  const counts = allPhotos.length + ' pics · ' + allScans.length + ' scans · ' + allLifts.length + ' lifts · ' + allMeasures.length + ' tape';
+  try{
+    const est = await navigator.storage.estimate();
+    const used = (est.usage/1048576).toFixed(1);
+    const persisted = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    $('#storageNote').textContent = used + ' MB · ' + counts + (persisted ? ' · protected' : '');
+  }catch(e){ $('#storageNote').textContent = counts; }
+}
+/* backup nag */
+$('#nagExport').addEventListener('click', ()=> $('#btnExport').click());
+$('#nagX').addEventListener('click', ()=>{ nagDismissed = true; updateNag(); });
+
+/* ============ timelapse ============ */
+$('#btnTimelapse').addEventListener('click', ()=> openOvl($('#tlSheet')));
+$$('#tlPoseGrid button').forEach(b => b.addEventListener('click', ()=>{
+  $$('#tlPoseGrid button').forEach(x => x.classList.toggle('on', x === b));
+}));
+$('#btnMakeTl').addEventListener('click', async ()=>{
+  if(tlBusy) return;
+  if(!('MediaRecorder' in window)){ toast('Video not supported in this browser', true); return; }
+  const pose = $('#tlPoseGrid button.on').dataset.p;
+  const pics = allPhotos.filter(p => p.pose === pose).sort((a,b)=>a.ts-b.ts);
+  const prog = $('#tlProg'), btn = $('#btnMakeTl');
+  if(pics.length < 2){ prog.textContent = 'NEED 2+ ' + POSES[pose] + ' PICS'; return; }
+  tlBusy = true; btn.disabled = true; btn.textContent = 'RENDERING…';
+  try{
+    const W = 720, H = 960, MS_PER_FRAME = 700;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    const stream = cv.captureStream(0);
+    const track = stream.getVideoTracks()[0];
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    const chunks = [];
+    const rec = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 6000000});
+    rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+    const stopped = new Promise(res => rec.onstop = res);
+    rec.start();
+    for(let i = 0; i < pics.length; i++){
+      const bmp = await loadBitmap(pics[i].img);
+      const s = Math.max(W/bmp.width, H/bmp.height);
+      const dw = bmp.width*s, dh = bmp.height*s;
+      g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+      g.drawImage(bmp, (W-dw)/2, (H-dh)/2, dw, dh);
+      if(bmp.close) bmp.close();
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, H-60, W, 60);
+      g.fillStyle = '#ffb020'; g.font = '700 26px Bahnschrift, sans-serif'; g.textAlign = 'left';
+      g.fillText(monthLabelFull(pics[i].month), 20, H-22);
+      g.fillStyle = '#8a8f98'; g.textAlign = 'right'; g.font = '700 18px Bahnschrift, sans-serif';
+      g.fillText((i+1) + '/' + pics.length, W-20, H-22);
+      track.requestFrame();
+      prog.textContent = 'FRAME ' + (i+1) + ' / ' + pics.length;
+      await new Promise(r => setTimeout(r, MS_PER_FRAME));
+    }
+    rec.stop();
+    await stopped;
+    const blob = new Blob(chunks, {type: mime});
+    if(tlURL) URL.revokeObjectURL(tlURL);
+    tlURL = URL.createObjectURL(blob);
+    $('#tlPrev').innerHTML = '<video controls playsinline loop src="' + tlURL + '"></video>';
+    const a = document.createElement('a');
+    a.href = tlURL;
+    a.download = 'ironlog-' + pose + '-timelapse.webm';
+    document.body.appendChild(a); a.click(); a.remove();
+    prog.textContent = pics.length + ' FRAMES · SAVED AS WEBM ✓';
+  }catch(err){
+    prog.textContent = '';
+    toast('Timelapse failed: ' + err.message, true);
+  }finally{
+    tlBusy = false; btn.disabled = false; btn.textContent = 'GENERATE';
+  }
+});
+
+/* backup */
+function blobToDataURL(b){
+  return new Promise((res, rej)=>{
+    const r = new FileReader();
+    r.onload = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+    r.readAsDataURL(b);
+  });
+}
+$('#btnExport').addEventListener('click', async ()=>{
+  toast('Building backup…');
+  try{
+    // streamed into Blob parts so a big photo library never lives in memory as one giant string
+    let parts = [];
+    const push = s => {
+      parts.push(s);
+      if(parts.length > 48) parts = [new Blob(parts)];
+    };
+    push('{"app":"ironlog","version":2,"exported":' + JSON.stringify(new Date().toISOString()) +
+         ',"settings":' + JSON.stringify(S) +
+         ',"lifts":' + JSON.stringify(allLifts.map(l => ({ts: l.ts, month: l.month, exercise: l.exercise, weightLb: l.weightLb, reps: l.reps, e1rmLb: l.e1rmLb}))) +
+         ',"measures":' + JSON.stringify(allMeasures.map(m => { const o = {ts: m.ts, month: m.month}; for(const [k] of MEAS_FIELDS) o[k] = m[k] ?? null; return o; })) +
+         ',"photos":[');
+    for(let i = 0; i < allPhotos.length; i++){
+      const p = allPhotos[i];
+      push((i ? ',' : '') + JSON.stringify({ts: p.ts, month: p.month, pose: p.pose, note: p.note, img: await blobToDataURL(p.img)}));
+    }
+    push('],"scans":[');
+    for(let i = 0; i < allScans.length; i++){
+      const s = allScans[i];
+      push((i ? ',' : '') + JSON.stringify({ts: s.ts, month: s.month, weightLb: s.weightLb, bodyFat: s.bodyFat,
+        muscleLb: s.muscleLb, visceral: s.visceral, waterPct: s.waterPct, bmi: s.bmi, note: s.note,
+        img: s.img ? await blobToDataURL(s.img) : null}));
+    }
+    push(']}');
+    const blob = new Blob(parts, {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'ironlog-backup-' + todayStr() + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
+    S.lastExport = Date.now();
+    saveSettings();
+    updateNag();
+    toast('Backup exported ✓');
+  }catch(err){ toast('Export failed: ' + err.message, true); }
+});
+$('#btnImport').addEventListener('click', ()=> $('#inImport').click());
+$('#inImport').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  let data;
+  try{
+    data = JSON.parse(await f.text());
+    if(data.app !== 'ironlog' || !Array.isArray(data.photos) || !Array.isArray(data.scans)) throw new Error('not an IronLog backup');
+  }catch(err){ toast('Import failed: ' + err.message, true); return; }
+  // Dedupe on DAY + CONTENT signatures (not raw ts): re-importing the same backup is
+  // idempotent, while distinct same-day records from another device (whose ts values
+  // collide at noon by construction) get re-slotted onto a free ts instead of dropped.
+  // Signatures update as records land, so a partial run + retry never duplicates,
+  // and one corrupt record skips only itself.
+  const wasFresh = allPhotos.length + allScans.length + allLifts.length + allMeasures.length === 0;
+  function dataURLBytes(u){
+    const i = u.indexOf(',');
+    if(i < 0) return 0;
+    const n = u.length - i - 1;
+    const pad = u.endsWith('==') ? 2 : u.endsWith('=') ? 1 : 0;
+    return Math.floor(n/4)*3 - pad;   // equals the decoded blob's byte size
+  }
+  const sigP = new Set(allPhotos.map(x => dayKey(x.ts) + '|' + x.pose + '|' + (x.img ? x.img.size : 0)));
+  const sigS = new Set(allScans.map(x => dayKey(x.ts) + '|' + x.weightLb + '|' + (x.bodyFat ?? '')));
+  const sigL = new Set(allLifts.map(x => dayKey(x.ts) + '|' + x.exercise + '|' + x.weightLb + '|' + x.reps));
+  const sigM = new Set(allMeasures.map(x => dayKey(x.ts) + '|' + MEAS_FIELDS.map(([k]) => x[k] ?? '').join('|')));
+  const tsP = new Set(allPhotos.map(x => x.ts)), tsS = new Set(allScans.map(x => x.ts));
+  const tsL = new Set(allLifts.map(x => x.ts)), tsM = new Set(allMeasures.map(x => x.ts));
+  let np = 0, ns = 0, fails = 0;
+  toast('Importing…');
+  for(const p of data.photos){
+    try{
+      if(!p || typeof p.ts !== 'number' || !p.img){ fails++; continue; }
+      const pose = p.pose || 'other';
+      const key = dayKey(p.ts) + '|' + pose + '|' + dataURLBytes(p.img);
+      if(sigP.has(key)) continue;
+      const img = await (await fetch(p.img)).blob();
+      const thumb = await scaleToBlob(await loadBitmap(img), 360, 0.75);
+      const ts = nextFreeTs(tsP, p.ts);
+      await dbPut('photos', {ts, month: monthKey(new Date(ts)), pose, note: p.note || '', img, thumb});
+      sigP.add(key); np++;
+    }catch(err){ fails++; }
+  }
+  for(const s of data.scans){
+    try{
+      if(!s || typeof s.ts !== 'number' || typeof s.weightLb !== 'number'){ fails++; continue; }
+      const key = dayKey(s.ts) + '|' + s.weightLb + '|' + (s.bodyFat ?? '');
+      if(sigS.has(key)) continue;
+      let img = null, thumb = null;
+      if(s.img){ img = await (await fetch(s.img)).blob(); thumb = await scaleToBlob(await loadBitmap(img), 360, 0.75); }
+      const ts = nextFreeTs(tsS, s.ts);
+      await dbPut('scans', {ts, month: monthKey(new Date(ts)), weightLb: s.weightLb, bodyFat: s.bodyFat ?? null,
+        muscleLb: s.muscleLb ?? null, visceral: s.visceral ?? null, waterPct: s.waterPct ?? null,
+        bmi: s.bmi ?? null, note: s.note || '', img, thumb});
+      sigS.add(key); ns++;
+    }catch(err){ fails++; }
+  }
+  let nl = 0, nm = 0;
+  for(const l of (Array.isArray(data.lifts) ? data.lifts : [])){
+    try{
+      if(!l || typeof l.ts !== 'number' || typeof l.weightLb !== 'number' || !l.exercise || !(l.reps >= 1)){ fails++; continue; }
+      const exercise = String(l.exercise).toUpperCase();
+      const reps = Math.round(l.reps);
+      const key = dayKey(l.ts) + '|' + exercise + '|' + l.weightLb + '|' + reps;
+      if(sigL.has(key)) continue;
+      const ts = nextFreeTs(tsL, l.ts);
+      await dbPut('lifts', {ts, month: monthKey(new Date(ts)), exercise,
+        weightLb: l.weightLb, reps, e1rmLb: l.e1rmLb ?? r1(epley(l.weightLb, reps))});
+      sigL.add(key); nl++;
+    }catch(err){ fails++; }
+  }
+  for(const m of (Array.isArray(data.measures) ? data.measures : [])){
+    try{
+      if(!m || typeof m.ts !== 'number'){ fails++; continue; }
+      const rec = {};
+      let any = false;
+      for(const [k] of MEAS_FIELDS){ rec[k] = typeof m[k] === 'number' ? m[k] : null; if(rec[k] != null) any = true; }
+      if(!any) continue;
+      const key = dayKey(m.ts) + '|' + MEAS_FIELDS.map(([k]) => rec[k] ?? '').join('|');
+      if(sigM.has(key)) continue;
+      rec.ts = nextFreeTs(tsM, m.ts);
+      rec.month = monthKey(new Date(rec.ts));
+      await dbPut('measures', rec);
+      sigM.add(key); nm++;
+    }catch(err){ fails++; }
+  }
+  // settings restore: union marks, fill empty goals/height; adopt units only on a fresh device
+  let setChanged = false;
+  if(data.settings && typeof data.settings === 'object'){
+    const ds = data.settings;
+    if(Array.isArray(ds.marks)){
+      for(const m of ds.marks){
+        if(!m || typeof m.ts !== 'number' || !m.label) continue;
+        const kind = m.kind === 'stop' ? 'stop' : 'start';
+        if(S.marks.some(x => x.label === String(m.label) && x.kind === kind && dayKey(x.ts) === dayKey(m.ts))) continue;
+        let ts = m.ts;
+        while(S.marks.some(x => x.ts === ts)) ts++;
+        S.marks.push({ts, label: String(m.label), kind});
+        setChanged = true;
+      }
+    }
+    if(S.heightIn == null && typeof ds.heightIn === 'number'){ S.heightIn = ds.heightIn; setChanged = true; }
+    if(S.goalWeightLb == null && typeof ds.goalWeightLb === 'number'){ S.goalWeightLb = ds.goalWeightLb; setChanged = true; }
+    if(S.goalBf == null && typeof ds.goalBf === 'number'){ S.goalBf = ds.goalBf; setChanged = true; }
+    if(wasFresh && (ds.units === 'us' || ds.units === 'metric')){ S.units = ds.units; setChanged = true; }
+  }
+  if(setChanged) saveSettings();
+  await reloadData();
+  refreshUI(); updateStorageNote();
+  const bits = [np + ' pics', ns + ' scans'];
+  if(nl) bits.push(nl + ' lifts');
+  if(nm) bits.push(nm + ' tape');
+  toast('Imported ' + bits.join(', ') + (fails ? ' · ' + fails + ' failed' : ' ✓'), fails > 0);
+});
+$('#btnWipe').addEventListener('click', async ()=>{
+  const ok = await confirmBox('WIPE EVERYTHING?', 'Every pic and scan on this device gets deleted. Export a backup first if you care.');
+  if(!ok) return;
+  const ok2 = await confirmBox('LAST CHANCE', 'Really delete it all?');
+  if(!ok2) return;
+  await new Promise((res, rej)=>{
+    const t = db.transaction(['photos','scans','lifts','measures'], 'readwrite');
+    t.objectStore('photos').clear(); t.objectStore('scans').clear();
+    t.objectStore('lifts').clear(); t.objectStore('measures').clear();
+    t.oncomplete = res; t.onerror = ()=>rej(t.error);
+  });
+  for(const u of thumbURLs.values()) URL.revokeObjectURL(u);
+  thumbURLs.clear();
+  await reloadData();
+  refreshUI(); updateStorageNote();
+  closeOvl($('#setSheet'));
+  toast('All data wiped');
+});
+
+/* ============ confirm & sheet dismiss ============ */
+let confirmResolve = null;
+function confirmBox(title, msg){
+  $('#cTitle').textContent = title;
+  $('#cMsg').textContent = msg;
+  openOvl($('#confirmOvl'));
+  return new Promise(res => confirmResolve = res);
+}
+$('#cYes').addEventListener('click', ()=>{
+  const r = confirmResolve; confirmResolve = null;
+  closeOvl($('#confirmOvl'));
+  r && r(true);
+});
+$('#cNo').addEventListener('click', ()=> closeOvl($('#confirmOvl')));
+$$('.ovl').forEach(o => o.addEventListener('click', async e => {
+  if(e.target !== o || o.id === 'confirmOvl') return;
+  if(o.id === 'tlSheet' && tlBusy) return;
+  if(o.id === 'metaSheet' && pendingFiles.length){
+    const ok = await confirmBox('DISCARD PICS?', 'These pics haven\'t been saved. Camera shots can\'t be recovered.');
+    if(!ok) return;
+    pendingFiles = [];
+  }
+  closeOvl(o);
+}));
+
+/* ============ boot ============ */
+(async function init(){
+  try{
+    db = await openDB();
+    await reloadData();
+  }catch(err){
+    toast('Storage unavailable: ' + err.message, true);
+  }
+  renderPhotos();
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
