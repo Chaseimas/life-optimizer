@@ -360,6 +360,10 @@ input.f::-webkit-calendar-picker-indicator{filter:invert(.7)}
           <div><label class="f" for="tpWaist">WAIST <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpWaist"></div>
           <div><label class="f" for="tpThighs">THIGHS <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpThighs"></div>
         </div>
+        <div class="frow">
+          <div><label class="f" for="tpCalves">CALVES <span class="tpu">(IN)</span></label><input class="f" type="number" inputmode="decimal" step="0.1" id="tpCalves"></div>
+          <div></div>
+        </div>
         <button class="btn" id="btnSaveTape">SAVE TAPE</button>
       </div>
       <div id="tapeList"></div>
@@ -567,7 +571,7 @@ const CHARTS = [
   {key:'bodyFat',  title:'BODY FAT', color:'#0f9e80', unit:()=>'%',  conv:v=>v},
   {key:'muscleLb', title:'MUSCLE',   color:'#4f83e0', unit:()=>S.units==='metric'?'kg':'lb', conv:v=>S.units==='metric'?v*0.45359237:v},
 ];
-const MEAS_FIELDS = [['neck','NECK'], ['chest','CHEST'], ['arms','ARMS'], ['waist','WAIST'], ['thighs','THIGHS']];
+const MEAS_FIELDS = [['neck','NECK'], ['chest','CHEST'], ['arms','ARMS'], ['waist','WAIST'], ['thighs','THIGHS'], ['calves','CALVES']];
 const WAIST_COLOR = '#d4688a', LIFT_COLOR = '#c97e00';
 let db = null;
 let S = loadSettings();               // settings

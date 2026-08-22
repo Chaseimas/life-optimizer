@@ -78,7 +78,7 @@ Industrial gym-plate: near-black iron surfaces, gunmetal cards, safety-amber acc
 - **Goal lines**: `goalWeightLb`/`goalBf` in settings, dashed reference lines on the weight/body-fat charts.
 - **FFMI tile**: lean mass (from latest scan with body fat) ÷ height²; tiles grid is now 3×2 with Muscle added.
 - **Lifts tab** (5th tab): `lifts` store, exercise picker (big 4 + row + custom), Epley e1RM, PR badges/toast, best-e1RM tiles, per-exercise e1RM trend chart.
-- **Tape measurements**: `measures` store, Scans tab gains a SCANS|TAPE toggle; neck/chest/arms/waist/thighs with per-entry deltas; Compare stats table gains tape rows; Trends gains a waist chart (validated rose `#d4688a`).
+- **Tape measurements**: `measures` store, Scans tab gains a SCANS|TAPE toggle; neck/chest/arms/waist/thighs/calves (calves added 2026-08-21) with per-entry deltas; Compare stats table gains tape rows; Trends gains a waist chart (validated rose `#d4688a`).
 - **Timelapse**: canvas + `captureStream(0)`/MediaRecorder webm of any pose's photos oldest→newest, ~0.7s/frame, month captions; downloads + inline preview.
 - **Cycle marks**: `settings.marks` (label/date/start|stop) managed in settings; dashed vertical lines on weight/body-fat charts.
 - IndexedDB bumped to v2 (new stores); backup format v2 (adds `lifts`/`measures`; v1 backups still import).

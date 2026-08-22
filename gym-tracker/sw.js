@@ -1,7 +1,7 @@
 // BUMP CACHE_NAME on ANY deploy that changes manifest.json or the icons —
 // those are served cache-first and only refresh when a changed sw.js reinstalls.
 // (index.html updates flow through the network-first navigate branch automatically.)
-const CACHE_NAME = 'ironlog-v2';
+const CACHE_NAME = 'ironlog-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -32,7 +32,9 @@ self.addEventListener('fetch', e => {
     // network-first with a short timeout so a stalled gym connection can't hang
     // launch; fresh copies land under the canonical './index.html' key; HTTP
     // error pages (Pages deploy 404s) fall back to the cached shell too
-    const net = fetch(e.request).then(response => {
+    // fetch by URL with cache:'no-cache' so the HTTP cache can't hand back a stale
+    // shell (GitHub Pages sends max-age=600); a navigate-mode Request can't take init
+    const net = fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(response => {
       if (response.status === 200) {
         const clone = response.clone();
         caches.open(CACHE_NAME).then(cache => {
