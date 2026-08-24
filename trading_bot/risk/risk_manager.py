@@ -106,6 +106,11 @@ class RiskManager:
                 f"drawdown {drawdown:.2%} >= limit {self.limits.max_drawdown:.2%}",
             )
 
+    @property
+    def halted_for_day(self) -> str | None:
+        """Reason trading is halted for the rest of the day, else None."""
+        return self._daily_halt_reason
+
     # ---- pre-trade gate ------------------------------------------------------
     def pre_trade_check(
         self, proposed_notional: float = 0.0, current_open_exposure: float = 0.0

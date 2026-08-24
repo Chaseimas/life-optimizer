@@ -51,14 +51,14 @@ edge — if any — is strongest.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Structure, config, logging, experiment tracking, tests, abstractions | **DONE** |
-| 2 | Historical data ingestion (MNQ rollovers/sessions; HL funding/24-7) | next |
-| 3 | Data cleaning (bad ticks, gaps, duplicates, timezones, holidays) | — |
-| 4 | Feature engineering (timestamp-safe only) | — |
-| 5 | Event-driven backtester | — |
-| 6 | Fees / slippage / funding in simulation | cost models done; wiring in 5 |
-| 7 | Simple baseline strategies (momentum, mean-rev, VWAP, ORB, regimes) | momentum skeleton only |
-| 8 | Out-of-sample testing | split machinery done; needs 5+7 |
-| 9 | Walk-forward testing | — |
+| 2 | Historical data ingestion | **DONE** (framework + Hyperliquid client + CSV/Databento import + futures roll handling; real data pull needs a networked machine — see below) |
+| 3 | Data cleaning (bad ticks, gaps, duplicates, timezones, sessions) | **DONE** (audited `CleanReport`, CME session filter, gaps reported never filled) |
+| 4 | Feature engineering (timestamp-safe only) | **DONE** (17 features, every one passes the leak detector; labels quarantined) |
+| 5 | Event-driven backtester | **DONE** (next-bar fills, gap-aware stops, stop-before-target, truncation-invariance tested) |
+| 6 | Fees / slippage / funding in simulation | **DONE** (per-contract + bps fees, tick/bps slippage, hourly funding) |
+| 7 | Simple baseline strategies (momentum, mean-rev, VWAP, ORB, regimes) | momentum only; rest pending real data |
+| 8 | Out-of-sample testing | machinery done (embargoed splits, warmup gating); verdicts need real data |
+| 9 | Walk-forward testing | **DONE** (train-only selection, per-window OOS, param-stability report) |
 | 10 | Monte Carlo | — |
 | 11 | ML experiments (only if baselines earn it) | — |
 | 12 | Cross-market comparison / portfolio mode | — |
@@ -66,9 +66,13 @@ edge — if any — is strongest.
 | 14 | Monitoring | logging done; dashboard/alerts pending |
 | 15 | Live execution (explicitly configured, smallest size) | intentionally unbuilt |
 
-What "DONE" means for Phase 1: 112 automated tests cover config gates, market
-math, position sizing, risk limits, kill switch, executor gating, metrics,
-fee/slippage models, experiment logging, and automated look-ahead detection.
+~200 automated tests cover config gates, market math, position sizing, risk
+limits, kill switch, executor gating, metrics, cost models, data ingestion
+and cleaning, feature leak detection, hand-computed backtest scenarios, and
+walk-forward honesty mechanics. The whole pipeline has been validated
+end-to-end on labeled synthetic random-walk data — where it correctly
+reports that the baseline strategy loses roughly its trading costs, which is
+the truthful outcome on edge-free data. **No real-market results exist yet.**
 
 ## Setup
 
@@ -119,8 +123,50 @@ SimpleMomentum signals → next-bar evaluation → append to the experiment log
 rate near 50% and mean return near zero — the data is random by construction.
 It proves the plumbing is look-ahead-safe, not that anything is profitable.
 
-Other entry points (`backtest.py`, `walkforward.py`, `paper_trade.py`) print
-their phase status and exit; `live_trade.py` refuses to run.
+### 6. Get data, backtest, walk-forward
+
+```bash
+# See what's stored:
+python -m trading_bot.data_pipeline.fetch catalog
+
+# Hyperliquid public candles + funding (research data; needs normal internet —
+# this repo's development sandbox blocks market-data hosts, a laptop won't):
+python -m trading_bot.data_pipeline.fetch hyperliquid --coin BTC --interval 1h \
+    --days 200 --funding
+
+# Import MNQ from a CSV (Databento or broker export; see --help for options):
+python -m trading_bot.data_pipeline.fetch csv --path mnq_1m.csv --market MNQ \
+    --interval 1m --ts-col ts_event --ts-semantics open
+
+# Synthetic random-walk data (machinery validation only, clearly labeled):
+python -m trading_bot.data_pipeline.fetch synthetic --market SYNTH --interval 5m
+
+# Backtest a stored dataset (full report + experiment log entry):
+python trading_bot/backtest.py --market HL:BTC --interval 1h \
+    --strategy simple_momentum --params '{"lookback": 24}' --stop-atr 2.0 --funding
+
+# Rolling walk-forward (params chosen on train only; aggregated OOS report):
+python trading_bot/walkforward.py --market HL:BTC --interval 1h \
+    --strategy simple_momentum --grid '{"lookback": [12, 24, 48]}' \
+    --train-bars 2000 --test-bars 500
+```
+
+Data notes:
+* **MNQ**: high-quality intraday history is commercial. Databento is the
+  recommended source (their continuous-contract symbology handles rollovers;
+  otherwise `data_pipeline/continuous.py` builds volume-rolled,
+  difference-back-adjusted series from per-contract files). Free sources do
+  not provide research-grade MNQ intraday data — do not pretend otherwise.
+* **Hyperliquid**: the public info API serves recent candles (~5000 per
+  interval, no key needed) and hourly funding history — enough to start, not
+  enough for multi-year out-of-sample verdicts. Longer crypto history needs
+  an archive source; treat any cross-exchange proxy data with suspicion.
+* Raw data is stored untouched in `data/raw/`; cleaning writes an audited
+  copy to `data/processed/` and every drop/flag/gap is counted in the
+  `CleanReport` printed at fetch time.
+
+`paper_trade.py` prints its phase status and exits; `live_trade.py` refuses
+to run.
 
 ## Configuration
 

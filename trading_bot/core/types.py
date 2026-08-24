@@ -36,6 +36,10 @@ class ExecutionMode(str, Enum):
 class Venue(str, Enum):
     CME = "cme"
     HYPERLIQUID = "hyperliquid"
+    # Synthetic pipeline-test instrument. No executor accepts this venue, so
+    # it can never be traded — it exists so end-to-end pipeline tests use an
+    # honestly-labeled instrument instead of masquerading as a real market.
+    SYNTHETIC = "synthetic"
 
 
 class Liquidity(str, Enum):
