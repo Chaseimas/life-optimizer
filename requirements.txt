@@ -1,0 +1,12 @@
+# --- Phase 1 core dependencies (research scaffolding) ---
+numpy>=1.26
+pandas>=2.2
+PyYAML>=6.0
+pytest>=8.0
+
+# --- Later phases: uncomment when the phase actually starts ---
+# scikit-learn              # Phase 11: ML baselines (logistic regression, random forest)
+# lightgbm                  # Phase 11: gradient boosting (only after simple baselines exist)
+# matplotlib                # Reporting: equity / drawdown curves
+# databento                 # Phase 2: CME historical data (MNQ) — paid, high quality
+# hyperliquid-python-sdk    # Phase 2+: Hyperliquid market data (research only; live gated)

@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Trading bot: logs and local data are never committed
+trading_bot/logs/
+trading_bot/data/raw/*
+trading_bot/data/processed/*
+trading_bot/data/features/*
+!trading_bot/data/raw/.gitkeep
+!trading_bot/data/processed/.gitkeep
+!trading_bot/data/features/.gitkeep
+
+# Manual kill-switch sentinel (presence = halt trading)
+trading_bot/KILL_SWITCH

@@ -1,0 +1,69 @@
+# =============================================================================
+# trading_bot configuration
+#
+# SAFETY DEFAULTS:
+#   * execution.mode is "paper". Live trading (Phase 15) is NOT implemented
+#     and cannot be enabled by flipping a single flag: it requires
+#     mode: live, live.enabled: true, AND the exact confirmation phrase.
+#   * Hyperliquid is DISABLED. Do not enable it for U.S. trading unless a
+#     lawful, compliant access path exists. Never bypass geo restrictions.
+#   * Risk limits are hard limits. The strategy layer cannot reset them.
+# =============================================================================
+
+project:
+  name: trading_bot
+  timezone: UTC
+
+# ---- Hard risk limits (account currency = USD) ------------------------------
+risk:
+  max_daily_loss: 300.0          # stop trading for the day when daily P&L <= -300
+  max_risk_per_trade: 0.005      # 0.5% of equity between entry and stop
+  max_position_size: 3           # max contracts (MNQ) / coins (perps) per market
+  max_trades_per_day: 8
+  max_drawdown: 0.10             # 10% off peak equity trips the kill switch
+  max_open_exposure: 60000.0     # max total open notional, USD
+  max_consecutive_losses: 3      # stop for the day after 3 losses in a row
+
+# ---- Execution --------------------------------------------------------------
+execution:
+  mode: paper                    # paper | live  (live is Phase 15; not implemented)
+  live:
+    enabled: false
+    # Must be exactly "I-UNDERSTAND-LIVE-TRADING-RISKS-REAL-MONEY" to arm live mode.
+    confirm_phrase: ""
+
+# ---- Venues -----------------------------------------------------------------
+venues:
+  cme:
+    enabled: true                # research / backtest / paper only for now
+    fees:
+      commission_per_side: 1.24  # all-in per contract per side — VERIFY with your broker
+  hyperliquid:
+    enabled: false               # architecture supports it; disabled by default
+    us_compliant_access: false   # set true ONLY if a lawful U.S. path exists
+    fees:
+      taker: 0.00045             # base tier — VERIFY against your fee tier
+      maker: 0.00015
+
+# ---- Markets available to research ------------------------------------------
+markets:
+  - MNQ
+  - "HL:BTC"
+  - "HL:ETH"
+  - "HL:SOL"
+
+# ---- Data locations (relative to trading_bot/) ------------------------------
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  features_dir: data/features
+
+# ---- Logging ----------------------------------------------------------------
+logging:
+  level: INFO
+  dir: logs
+  console: true
+
+# ---- Research / experiment tracking -----------------------------------------
+research:
+  experiment_log: research/experiment_records.jsonl
