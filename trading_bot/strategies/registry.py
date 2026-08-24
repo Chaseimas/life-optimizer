@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from trading_bot.strategies.base_strategy import BaseStrategy
+from trading_bot.strategies.breakout import OpeningRangeBreakout
+from trading_bot.strategies.mean_reversion import ZScoreMeanReversion
 from trading_bot.strategies.momentum import SimpleMomentum
+from trading_bot.strategies.regime import RegimeGatedMomentum
+from trading_bot.strategies.vwap import RollingVWAPStrategy
 
 STRATEGY_REGISTRY: dict[str, type[BaseStrategy]] = {
     SimpleMomentum.name: SimpleMomentum,
-    # Phase 7 additions (mean_reversion, vwap, breakout, regime) register here
-    # once they are implemented and tested.
+    ZScoreMeanReversion.name: ZScoreMeanReversion,
+    RollingVWAPStrategy.name: RollingVWAPStrategy,
+    OpeningRangeBreakout.name: OpeningRangeBreakout,
+    RegimeGatedMomentum.name: RegimeGatedMomentum,
 }
 
 

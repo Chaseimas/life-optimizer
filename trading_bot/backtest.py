@@ -64,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--long-only", action="store_true")
     p.add_argument("--no-log", action="store_true", help="skip the experiment log (smoke checks only)")
     p.add_argument("--tag", default="", help="free-form note for the experiment log")
+    p.add_argument("--mc", type=int, default=0, metavar="N",
+                   help="run N Monte Carlo resamples of the trade sequence (0 = off)")
+    p.add_argument("--mc-method", default="shuffle", choices=["shuffle", "bootstrap"])
     args = p.parse_args(argv)
 
     config = load_config()
@@ -104,6 +107,27 @@ def main(argv: list[str] | None = None) -> int:
 
     print(format_report(result))
 
+    mc_summary = None
+    if args.mc > 0:
+        from trading_bot.backtesting.monte_carlo import format_monte_carlo, monte_carlo_trades
+
+        if len(result.trades) < 5:
+            print("\nMonte Carlo skipped: fewer than 5 trades.")
+        else:
+            mc = monte_carlo_trades(
+                result.trade_pnls, initial_equity=args.equity,
+                n_sims=args.mc, method=args.mc_method,
+            )
+            print(format_monte_carlo(mc))
+            mc_summary = {
+                "method": mc.method, "n_sims": mc.n_sims,
+                "drawdown_percentiles": mc.drawdown_percentiles,
+                "final_pnl_percentiles": mc.final_pnl_percentiles,
+                "prob_final_negative": mc.prob_final_negative,
+                "losing_streak_percentiles": mc.losing_streak_percentiles,
+                "prob_ruin": mc.prob_ruin, "ruin_drawdown": mc.ruin_drawdown,
+            }
+
     meta = store.meta(dataset_id, args.interval, stage="processed")
     if "synthetic" in str(meta.get("source", "")):
         print("\nWARNING: this dataset is SYNTHETIC random-walk data. The numbers "
@@ -126,7 +150,10 @@ def main(argv: list[str] | None = None) -> int:
             },
             dataset=f"{dataset_id}@{args.interval} source={meta.get('source', 'unknown')} "
                     f"span={df.index[0]}..{df.index[-1]} rows={len(df)}",
-            results={k: result.metrics.get(k) for k in REPORT_METRIC_KEYS},
+            results={
+                **{k: result.metrics.get(k) for k in REPORT_METRIC_KEYS},
+                **({"monte_carlo": mc_summary} if mc_summary else {}),
+            },
             notes=args.tag or "single-period backtest (in-sample unless stated otherwise)",
         )
         print(f"\nexperiment logged: {record.experiment_id} -> {exp_log.path}")

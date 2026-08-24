@@ -56,10 +56,10 @@ edge — if any — is strongest.
 | 4 | Feature engineering (timestamp-safe only) | **DONE** (17 features, every one passes the leak detector; labels quarantined) |
 | 5 | Event-driven backtester | **DONE** (next-bar fills, gap-aware stops, stop-before-target, truncation-invariance tested) |
 | 6 | Fees / slippage / funding in simulation | **DONE** (per-contract + bps fees, tick/bps slippage, hourly funding) |
-| 7 | Simple baseline strategies (momentum, mean-rev, VWAP, ORB, regimes) | momentum only; rest pending real data |
+| 7 | Simple baseline strategies | **DONE** as code (momentum, z-score mean reversion, rolling VWAP fade/trend, opening-range breakout, regime-gated momentum — all leak-tested); their *evaluation* awaits real data |
 | 8 | Out-of-sample testing | machinery done (embargoed splits, warmup gating); verdicts need real data |
 | 9 | Walk-forward testing | **DONE** (train-only selection, per-window OOS, param-stability report) |
-| 10 | Monte Carlo | — |
+| 10 | Monte Carlo | **DONE** (shuffle + bootstrap resampling: drawdown/streak/ruin distributions; `backtest.py --mc N`) |
 | 11 | ML experiments (only if baselines earn it) | — |
 | 12 | Cross-market comparison / portfolio mode | — |
 | 13 | Paper trading (same code path as live) | — |

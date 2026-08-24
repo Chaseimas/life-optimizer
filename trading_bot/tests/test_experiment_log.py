@@ -55,6 +55,26 @@ def test_load_all_on_missing_file(tmp_path):
     assert ExperimentLog(tmp_path / "nope.jsonl").load_all() == []
 
 
+def test_nested_results_serialize(exp_log):
+    """Regression: results with nested dicts (e.g. Monte Carlo summaries)
+    must serialize; mixed-type dict keys once broke sort_keys."""
+    from trading_bot.backtesting.monte_carlo import monte_carlo_trades
+
+    mc = monte_carlo_trades([10.0, -5.0, 8.0, -3.0, 12.0], initial_equity=1_000, n_sims=50)
+    rec = exp_log.log(
+        strategy="s", market="m", params={},
+        dataset="d",
+        results={"monte_carlo": {
+            "drawdown_percentiles": mc.drawdown_percentiles,
+            "final_pnl_percentiles": mc.final_pnl_percentiles,
+            "losing_streak_percentiles": mc.losing_streak_percentiles,
+        }},
+    )
+    loaded = exp_log.load_all()
+    assert loaded[-1]["experiment_id"] == rec.experiment_id
+    assert "drawdown_percentiles" in loaded[-1]["results"]["monte_carlo"]
+
+
 def test_smoke_experiment_runs_and_logs(exp_log):
     bars = generate_synthetic_bars(n=300, seed=11)
     results = run_signal_smoke_experiment(
