@@ -1,22 +1,21 @@
-"""Baseline (non-ML) reference models.
+"""Baseline reference for ML comparisons (Phase 11).
 
-STATUS: not implemented — Phase 11 prerequisite work.
-
-Planned design:
-* For every ML experiment there must be a corresponding simple baseline
-  (e.g. "always take the setup" / the plain rule-based strategy) evaluated
-  on the SAME data splits with the SAME costs.
-* An ML model is accepted only if it beats its baseline out-of-sample on
-  risk-adjusted performance by a statistically meaningful margin — otherwise
-  it is rejected, regardless of how sophisticated it is.
+The baseline against which every ML setup filter is judged is deliberately
+trivial: TAKE EVERY SETUP the underlying strategy generates. If a filter
+cannot beat "just take them all" on held-out trades, it is rejected —
+regardless of how sophisticated it is. The comparison protocol lives in
+``research/ml_experiment.py``; this module holds the baseline itself so the
+concept has one named home.
 """
 
 from __future__ import annotations
 
+from typing import Sequence
 
-class BaselineModel:
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Baseline reference models are scheduled with Phase 11. "
-            "Nothing is implemented yet."
-        )
+from trading_bot.backtesting.metrics import trade_stats
+
+
+def always_take_baseline(trade_pnls: Sequence[float]) -> dict:
+    """Statistics of taking every setup — the bar any ML filter must clear
+    out-of-sample."""
+    return trade_stats(list(trade_pnls))

@@ -60,11 +60,11 @@ edge — if any — is strongest.
 | 8 | Out-of-sample testing | machinery done (embargoed splits, warmup gating); verdicts need real data |
 | 9 | Walk-forward testing | **DONE** (train-only selection, per-window OOS, param-stability report) |
 | 10 | Monte Carlo | **DONE** (shuffle + bootstrap resampling: drawdown/streak/ruin distributions; `backtest.py --mc N`) |
-| 11 | ML experiments (only if baselines earn it) | — |
-| 12 | Cross-market comparison / portfolio mode | — |
-| 13 | Paper trading (same code path as live) | — |
-| 14 | Monitoring | logging done; dashboard/alerts pending |
-| 15 | Live execution (explicitly configured, smallest size) | intentionally unbuilt |
+| 11 | ML experiments (only if baselines earn it) | **DONE** as machinery (setup-filter ladder: logistic/RF/HistGB; time-ordered splits; accept/reject protocol that finds a planted edge AND rejects pure noise — both tested); real verdicts need real data |
+| 12 | Cross-market comparison / portfolio mode | **DONE** as machinery (strategy-P&L correlation incl. rolling; DIVERSIFY/CONCENTRATE/NO-BASIS verdicts) |
+| 13 | Paper trading (same code path as live) | **DONE** (drives the same engine via `step(bar)` — equivalence to backtest is a test, not a promise; replay feed + Hyperliquid polling feed; trades.jsonl/state.json per session) |
+| 14 | Monitoring | **DONE** at v1 (UTC logging, alert sinks incl. optional webhook, read-only status dashboard; alerts observe, the risk engine decides) |
+| 15 | Live execution (explicitly configured, smallest size) | intentionally unbuilt — requires a proven out-of-sample edge and completed paper trading first |
 
 ~200 automated tests cover config gates, market math, position sizing, risk
 limits, kill switch, executor gating, metrics, cost models, data ingestion
@@ -165,8 +165,36 @@ Data notes:
   copy to `data/processed/` and every drop/flag/gap is counted in the
   `CleanReport` printed at fetch time.
 
-`paper_trade.py` prints its phase status and exits; `live_trade.py` refuses
-to run.
+### 7. Paper trading (simulated fills — no orders are routed anywhere)
+
+```bash
+# Replay a stored dataset through the paper loop (works offline):
+python trading_bot/paper_trade.py --market SYNTH --interval 5m \
+    --strategy simple_momentum --replay
+
+# Live public market data with simulated fills (HL markets; needs internet):
+python trading_bot/paper_trade.py --market HL:BTC --interval 1m \
+    --strategy simple_momentum --live-data
+
+# Watch a running/finished session:
+python -m trading_bot.monitoring.dashboard --run-dir trading_bot/paper_runs/<ts>
+
+# Emergency stop from outside the process:
+touch trading_bot/KILL_SWITCH
+```
+
+The paper trader drives the exact same engine as the backtester
+(`engine.step(bar)` per completed bar) — signal logic, risk engine, sizing,
+stops and cost models are the same objects, and
+`tests/test_paper.py::test_paper_equals_backtest_on_identical_bars` proves
+it. Each session writes `trades.jsonl` (signal reason, intended vs simulated
+entry, stop, target, size, exit, fees, slippage, funding, net P&L),
+`state.json` (live status) and `result.json`. A stale data feed trips the
+kill switch. Optional webhook alerts: set `alerts.webhook_url` in config.
+
+`live_trade.py` still refuses to run — live execution is Phase 15 and only
+becomes relevant after a real edge survives Phases 7-10 on real data plus a
+paper-trading period.
 
 ## Configuration
 

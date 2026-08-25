@@ -1,4 +1,4 @@
-"""Event-driven backtest engine (Phases 5-6).
+"""Event-driven trading engine (Phases 5-6, refactored for Phase 13).
 
 One strictly chronological pass over completed bars. Per bar, in order:
 
@@ -13,6 +13,11 @@ One strictly chronological pass over completed bars. Per bar, in order:
    flatten at the next open.
 7. Mark-to-market equity record; streaming ATR update (used for sizing
    stops from the NEXT bar on — never the current one).
+
+The engine is incremental: ``start()`` -> ``step(bar)`` per completed bar ->
+``finalize()``. ``run(bars)`` is exactly that loop, and the PAPER TRADER
+drives the same ``step()`` — backtest and paper trading share one code path
+by construction, not by promise.
 
 No component ever sees a future bar. ``tests/test_engine.py`` verifies the
 mechanics against hand-computed trades and checks truncation invariance
@@ -162,6 +167,7 @@ class BacktestEngine:
         limits: RiskLimits,
         config: BacktestConfig | None = None,
         funding: pd.Series | None = None,
+        kill_switch: KillSwitch | None = None,
     ):
         self.spec = spec
         self.strategy = strategy
@@ -177,235 +183,324 @@ class BacktestEngine:
             if spec.fees.mode is FeeMode.PER_CONTRACT
             else BpsSlippage(1.0)
         )
+        self._external_kill_switch = kill_switch
+        self._started = False
 
-    # ------------------------------------------------------------------ run --
-    def run(self, bars: list[Bar]) -> BacktestResult:
+    # ---------------------------------------------------------------- start --
+    def start(self) -> None:
+        """Reset all run state. Call once before the first ``step``."""
+        self.risk = RiskManager(
+            self.limits,
+            self._external_kill_switch or KillSwitch(),
+            self.config.initial_equity,
+        )
+        self.strategy.reset()
+        self._atr = _StreamingATR(self.config.atr_period)
+        self.position: _Position | None = None
+        self._pending: Signal | None = None
+        self.trades: list[Trade] = []
+        self._equity_ts: list[datetime] = []
+        self._equity_vals: list[float] = []
+        self.halts: list[str] = []
+        self.stopped = False
+        self._flatten_reason: str | None = None
+        self._prev_ts: datetime | None = None
+        self._last_close: float | None = None
+        self._n_bars = 0
+        self._new_trades_this_step: list[Trade] = []
+        self._started = True
+
+    # ------------------------------------------------------------- internals --
+    def _close_position(self, pos: _Position, ref_price: float, ts: datetime,
+                        reason: str) -> None:
         cfg = self.config
         spec = self.spec
-        if not bars:
-            raise ValueError("no bars to backtest")
-        for b in bars:
-            if b.market_id != bars[0].market_id:
-                raise ValueError("all bars must belong to one market")
-        for a, b in zip(bars, bars[1:]):
-            if b.ts <= a.ts:
-                raise ValueError(f"bars must be strictly increasing in time (at {b.ts})")
+        exit_dir = -int(pos.direction)
+        fill, slip_out = market_fill(spec, exit_dir, ref_price, pos.size, self.slippage)
+        exit_fee = fee_for_fill(spec, fill, pos.size, cfg.liquidity)
+        gross = spec.pnl(pos.direction, pos.entry_fill, fill, pos.size)
+        fees = pos.entry_fee + exit_fee
+        net = gross - fees - pos.funding_paid
+        trade = Trade(
+            market_id=spec.market_id,
+            direction=pos.direction,
+            entry_ts=pos.entry_ts,
+            entry_price=pos.entry_fill,
+            exit_ts=ts,
+            exit_price=fill,
+            size=pos.size,
+            stop_price=pos.stop_price,
+            tp_price=pos.tp_price,
+            entry_reason=pos.entry_reason,
+            exit_reason=reason,
+            gross_pnl=gross,
+            fees=fees,
+            funding=pos.funding_paid,
+            slippage_cost=pos.entry_slippage + slip_out,
+            net_pnl=net,
+            bars_held=pos.bars_held,
+        )
+        self.trades.append(trade)
+        self._new_trades_this_step.append(trade)
+        self.risk.record_closed_trade(net)
 
-        risk = RiskManager(self.limits, KillSwitch(), cfg.initial_equity)
-        self.strategy.reset()
-        atr = _StreamingATR(cfg.atr_period)
-
-        position: _Position | None = None
-        pending: Signal | None = None
-        trades: list[Trade] = []
-        equity_ts: list[datetime] = []
-        equity_vals: list[float] = []
-        halts: list[str] = []
-        stopped = False
-        flatten_reason: str | None = None
-        prev_ts: datetime | None = None
-
-        def close_position(pos: _Position, ref_price: float, ts: datetime, reason: str) -> None:
-            exit_dir = -int(pos.direction)
-            fill, slip_out = market_fill(spec, exit_dir, ref_price, pos.size, self.slippage)
-            exit_fee = fee_for_fill(spec, fill, pos.size, cfg.liquidity)
-            gross = spec.pnl(pos.direction, pos.entry_fill, fill, pos.size)
-            fees = pos.entry_fee + exit_fee
-            net = gross - fees - pos.funding_paid
-            trades.append(
-                Trade(
-                    market_id=spec.market_id,
-                    direction=pos.direction,
-                    entry_ts=pos.entry_ts,
-                    entry_price=pos.entry_fill,
-                    exit_ts=ts,
-                    exit_price=fill,
-                    size=pos.size,
-                    stop_price=pos.stop_price,
-                    tp_price=pos.tp_price,
-                    entry_reason=pos.entry_reason,
-                    exit_reason=reason,
-                    gross_pnl=gross,
-                    fees=fees,
-                    funding=pos.funding_paid,
-                    slippage_cost=pos.entry_slippage + slip_out,
-                    net_pnl=net,
-                    bars_held=pos.bars_held,
-                )
+    # ---------------------------------------------------------------- step --
+    def step(self, bar: Bar) -> list[Trade]:
+        """Process one completed bar. Returns trades CLOSED during this bar
+        (for live logging); they are also accumulated in ``self.trades``."""
+        if not self._started:
+            raise RuntimeError("call start() before step()")
+        if bar.market_id != self.spec.market_id:
+            raise ValueError(
+                f"bar market {bar.market_id!r} does not match engine market "
+                f"{self.spec.market_id!r}; all bars must belong to one market"
             )
-            risk.record_closed_trade(net)
+        if self._prev_ts is not None and bar.ts <= self._prev_ts:
+            raise ValueError(f"bars must be strictly increasing in time (at {bar.ts})")
 
-        for bar in bars:
-            day = bar.ts.date()
-            if risk.current_day is None or day > risk.current_day:
-                risk.start_new_day(day)
+        cfg = self.config
+        spec = self.spec
+        risk = self.risk
+        self._new_trades_this_step = []
 
-            # 1) forced flatten scheduled by the previous bar
-            if position is not None and flatten_reason is not None:
-                close_position(position, bar.open, bar.ts, flatten_reason)
-                position = None
-            flatten_reason = None
+        day = bar.ts.date()
+        if risk.current_day is None or day > risk.current_day:
+            risk.start_new_day(day)
 
-            # 2) previous bar's signal executes at this bar's open
-            if pending is not None and not stopped:
-                desired = pending.direction
-                if position is not None and desired is not position.direction:
-                    close_position(
-                        position, bar.open, bar.ts,
-                        "signal_flat" if desired is Side.FLAT else "signal_flip",
-                    )
-                    position = None
-                if (
-                    position is None
-                    and desired is not Side.FLAT
-                    and (cfg.allow_short or desired is Side.LONG)
-                ):
-                    stop_dist = (
-                        pending.stop_distance
-                        or cfg.fixed_stop_points
-                        or (cfg.stop_atr_mult * atr.value
-                            if cfg.stop_atr_mult and atr.value else None)
-                    )
-                    sizing = compute_position_size(
-                        equity=risk.equity,
-                        price=bar.open,
-                        stop_distance=stop_dist if stop_dist else 0.0,
-                        spec=spec,
-                        limits=self.limits,
-                        risk_per_trade=cfg.risk_per_trade,
-                    )
-                    if sizing.size > 0:
-                        decision = risk.pre_trade_check(proposed_notional=sizing.notional)
-                        if decision:
-                            entry_dir = int(desired)
-                            fill, slip_in = market_fill(
-                                spec, entry_dir, bar.open, sizing.size, self.slippage
-                            )
-                            tp_dist = (
-                                cfg.fixed_tp_points
-                                or (cfg.tp_atr_mult * atr.value
-                                    if cfg.tp_atr_mult and atr.value else None)
-                            )
-                            position = _Position(
-                                direction=desired,
-                                size=sizing.size,
-                                entry_ts=bar.ts,
-                                entry_fill=fill,
-                                stop_price=spec.round_price(fill - entry_dir * stop_dist),
-                                tp_price=(
-                                    spec.round_price(fill + entry_dir * tp_dist)
-                                    if tp_dist else None
-                                ),
-                                entry_fee=fee_for_fill(spec, fill, sizing.size, cfg.liquidity),
-                                entry_slippage=slip_in,
-                                entry_reason=pending.reason,
-                            )
-                            risk.record_trade_opened()
-            pending = None
+        # 1) forced flatten scheduled by the previous bar
+        if self.position is not None and self._flatten_reason is not None:
+            self._close_position(self.position, bar.open, bar.ts, self._flatten_reason)
+            self.position = None
+        self._flatten_reason = None
 
-            # 3) protective exits against this bar's range
-            if position is not None:
-                hit = check_protective_exit(
-                    bar, position.direction, position.stop_price, position.tp_price
+        # 2) previous bar's signal executes at this bar's open
+        if self._pending is not None and not self.stopped:
+            desired = self._pending.direction
+            if self.position is not None and desired is not self.position.direction:
+                self._close_position(
+                    self.position, bar.open, bar.ts,
+                    "signal_flat" if desired is Side.FLAT else "signal_flip",
                 )
-                if hit is not None:
-                    ref_exit, reason = hit
-                    close_position(position, ref_exit, bar.ts, reason)
-                    position = None
-
-            # 4) funding accrual (perps): events in (prev bar close, this close]
+                self.position = None
             if (
-                position is not None
-                and self.funding is not None
-                and spec.has_funding
-                and prev_ts is not None
+                self.position is None
+                and desired is not Side.FLAT
+                and (cfg.allow_short or desired is Side.LONG)
             ):
-                window = self.funding[
-                    (self.funding.index > prev_ts) & (self.funding.index <= bar.ts)
-                ]
-                if len(window):
-                    notional = spec.notional(bar.close, position.size)
-                    # positive rate: longs pay, shorts receive
-                    position.funding_paid += float(window.sum()) * notional * int(
-                        position.direction
-                    )
-
-            # 5) strategy sees the completed bar
-            sig = self.strategy.on_bar(bar)
-            if sig is not None and not stopped:
-                if sig.ts != bar.ts:
-                    raise AssertionError(
-                        "strategy emitted a signal whose timestamp is not the "
-                        "current bar close — look-ahead guard tripped"
-                    )
-                pending = sig
-
-            # 6) risk state effects
-            if risk.kill_switch.is_tripped and not stopped:
-                stopped = True
-                pending = None
-                halts.append(f"{bar.ts.isoformat()} KILL SWITCH — run stopped")
-                if position is not None:
-                    flatten_reason = "kill_switch"
-            elif position is not None and risk.halted_for_day and flatten_reason is None:
-                halts.append(f"{bar.ts.isoformat()} daily halt: {risk.halted_for_day}")
-                flatten_reason = "risk_halt"
-
-            # 7) mark to market + ATR update (ATR usable from the NEXT bar)
-            if position is not None:
-                position.bars_held += 1
-                unrealized = spec.pnl(
-                    position.direction, position.entry_fill, bar.close, position.size
+                stop_dist = (
+                    self._pending.stop_distance
+                    or cfg.fixed_stop_points
+                    or (cfg.stop_atr_mult * self._atr.value
+                        if cfg.stop_atr_mult and self._atr.value else None)
                 )
-                mtm = risk.equity + unrealized - position.entry_fee - position.funding_paid
-            else:
-                mtm = risk.equity
-            equity_ts.append(bar.ts)
-            equity_vals.append(mtm)
-            atr.update(bar)
-            prev_ts = bar.ts
+                sizing = compute_position_size(
+                    equity=risk.equity,
+                    price=bar.open,
+                    stop_distance=stop_dist if stop_dist else 0.0,
+                    spec=spec,
+                    limits=self.limits,
+                    risk_per_trade=cfg.risk_per_trade,
+                )
+                if sizing.size > 0:
+                    decision = risk.pre_trade_check(proposed_notional=sizing.notional)
+                    if decision:
+                        entry_dir = int(desired)
+                        fill, slip_in = market_fill(
+                            spec, entry_dir, bar.open, sizing.size, self.slippage
+                        )
+                        tp_dist = (
+                            cfg.fixed_tp_points
+                            or (cfg.tp_atr_mult * self._atr.value
+                                if cfg.tp_atr_mult and self._atr.value else None)
+                        )
+                        self.position = _Position(
+                            direction=desired,
+                            size=sizing.size,
+                            entry_ts=bar.ts,
+                            entry_fill=fill,
+                            stop_price=spec.round_price(fill - entry_dir * stop_dist),
+                            tp_price=(
+                                spec.round_price(fill + entry_dir * tp_dist)
+                                if tp_dist else None
+                            ),
+                            entry_fee=fee_for_fill(spec, fill, sizing.size, cfg.liquidity),
+                            entry_slippage=slip_in,
+                            entry_reason=self._pending.reason,
+                        )
+                        risk.record_trade_opened()
+        self._pending = None
 
-        # end of data: force-close any open position at the last close
-        if position is not None:
-            close_position(position, bars[-1].close, bars[-1].ts, "end_of_data")
-            position = None
-            equity_vals[-1] = risk.equity
+        # 3) protective exits against this bar's range
+        if self.position is not None:
+            hit = check_protective_exit(
+                bar, self.position.direction, self.position.stop_price,
+                self.position.tp_price,
+            )
+            if hit is not None:
+                ref_exit, reason = hit
+                self._close_position(self.position, ref_exit, bar.ts, reason)
+                self.position = None
+
+        # 4) funding accrual (perps): events in (prev bar close, this close]
+        if (
+            self.position is not None
+            and self.funding is not None
+            and spec.has_funding
+            and self._prev_ts is not None
+        ):
+            window = self.funding[
+                (self.funding.index > self._prev_ts) & (self.funding.index <= bar.ts)
+            ]
+            if len(window):
+                notional = spec.notional(bar.close, self.position.size)
+                # positive rate: longs pay, shorts receive
+                self.position.funding_paid += float(window.sum()) * notional * int(
+                    self.position.direction
+                )
+
+        # 5) strategy sees the completed bar
+        sig = self.strategy.on_bar(bar)
+        if sig is not None and not self.stopped:
+            if sig.ts != bar.ts:
+                raise AssertionError(
+                    "strategy emitted a signal whose timestamp is not the "
+                    "current bar close — look-ahead guard tripped"
+                )
+            self._pending = sig
+
+        # 6) risk state effects
+        if risk.kill_switch.is_tripped and not self.stopped:
+            self.stopped = True
+            self._pending = None
+            self.halts.append(f"{bar.ts.isoformat()} KILL SWITCH — run stopped")
+            if self.position is not None:
+                self._flatten_reason = "kill_switch"
+        elif (
+            self.position is not None
+            and risk.halted_for_day
+            and self._flatten_reason is None
+        ):
+            self.halts.append(f"{bar.ts.isoformat()} daily halt: {risk.halted_for_day}")
+            self._flatten_reason = "risk_halt"
+
+        # 7) mark to market + ATR update (ATR usable from the NEXT bar)
+        if self.position is not None:
+            self.position.bars_held += 1
+            unrealized = spec.pnl(
+                self.position.direction, self.position.entry_fill, bar.close,
+                self.position.size,
+            )
+            mtm = (risk.equity + unrealized - self.position.entry_fee
+                   - self.position.funding_paid)
+        else:
+            mtm = risk.equity
+        self._equity_ts.append(bar.ts)
+        self._equity_vals.append(mtm)
+        self._atr.update(bar)
+        self._prev_ts = bar.ts
+        self._last_close = bar.close
+        self._n_bars += 1
+        return self._new_trades_this_step
+
+    # ------------------------------------------------------------- snapshot --
+    def snapshot(self) -> dict:
+        """Current engine state (paper-trading status/monitoring)."""
+        if not self._started:
+            return {"started": False}
+        pos = self.position
+        return {
+            "started": True,
+            "n_bars": self._n_bars,
+            "last_bar_ts": self._prev_ts.isoformat() if self._prev_ts else None,
+            "equity_realized": self.risk.equity,
+            "equity_mark_to_market": self._equity_vals[-1] if self._equity_vals else None,
+            "position": (
+                {
+                    "direction": pos.direction.name,
+                    "size": pos.size,
+                    "entry_ts": pos.entry_ts.isoformat(),
+                    "entry_price": pos.entry_fill,
+                    "stop_price": pos.stop_price,
+                    "tp_price": pos.tp_price,
+                    "funding_paid": pos.funding_paid,
+                    "bars_held": pos.bars_held,
+                }
+                if pos is not None else None
+            ),
+            "n_trades": len(self.trades),
+            "daily_pnl": self.risk.daily_pnl,
+            "trades_today": self.risk.trades_today,
+            "halted_for_day": self.risk.halted_for_day,
+            "kill_switch_tripped": self.risk.kill_switch.is_tripped,
+            "stopped": self.stopped,
+            "halts": list(self.halts),
+        }
+
+    # ------------------------------------------------------------- finalize --
+    def finalize(self, close_open_position: bool = True) -> BacktestResult:
+        if not self._started or self._n_bars == 0:
+            raise ValueError("no bars to backtest")
+
+        if self.position is not None and close_open_position:
+            # Force-close at the last seen bar's close price.
+            self._close_position(
+                self.position, self._last_close, self._prev_ts, "end_of_data"
+            )
+            self.position = None
+            self._equity_vals[-1] = self.risk.equity
 
         equity = pd.Series(
-            equity_vals, index=pd.DatetimeIndex(equity_ts, name="ts"), name="equity"
+            self._equity_vals,
+            index=pd.DatetimeIndex(self._equity_ts, name="ts"),
+            name="equity",
         )
         daily_equity = equity.groupby(equity.index.date).last()
         daily_pnl = daily_equity.diff()
         if len(daily_equity):
-            daily_pnl.iloc[0] = daily_equity.iloc[0] - cfg.initial_equity
+            daily_pnl.iloc[0] = daily_equity.iloc[0] - self.config.initial_equity
         daily_pnl.name = "daily_pnl"
 
-        periods = TRADING_DAYS_CRYPTO if spec.session.is_24_7 else TRADING_DAYS_FUTURES
-        pnls = [t.net_pnl for t in trades]
-        metrics = summarize(pnls, daily_pnl, cfg.initial_equity, periods_per_year=periods)
-        metrics["long"] = trade_stats([t.net_pnl for t in trades if t.direction is Side.LONG])
-        metrics["short"] = trade_stats([t.net_pnl for t in trades if t.direction is Side.SHORT])
-        metrics["exit_reasons"] = dict(Counter(t.exit_reason for t in trades))
-        metrics["total_fees"] = float(sum(t.fees for t in trades))
-        metrics["total_slippage_cost"] = float(sum(t.slippage_cost for t in trades))
-        metrics["total_funding"] = float(sum(t.funding for t in trades))
-        metrics["avg_bars_held"] = (
-            float(sum(t.bars_held for t in trades)) / len(trades) if trades else None
+        periods = TRADING_DAYS_CRYPTO if self.spec.session.is_24_7 else TRADING_DAYS_FUTURES
+        pnls = [t.net_pnl for t in self.trades]
+        metrics = summarize(pnls, daily_pnl, self.config.initial_equity,
+                            periods_per_year=periods)
+        metrics["long"] = trade_stats(
+            [t.net_pnl for t in self.trades if t.direction is Side.LONG]
         )
-        metrics["pnl_by_entry_hour_utc"] = _pnl_by_hour(trades)
+        metrics["short"] = trade_stats(
+            [t.net_pnl for t in self.trades if t.direction is Side.SHORT]
+        )
+        metrics["exit_reasons"] = dict(Counter(t.exit_reason for t in self.trades))
+        metrics["total_fees"] = float(sum(t.fees for t in self.trades))
+        metrics["total_slippage_cost"] = float(sum(t.slippage_cost for t in self.trades))
+        metrics["total_funding"] = float(sum(t.funding for t in self.trades))
+        metrics["avg_bars_held"] = (
+            float(sum(t.bars_held for t in self.trades)) / len(self.trades)
+            if self.trades else None
+        )
+        metrics["pnl_by_entry_hour_utc"] = _pnl_by_hour(self.trades)
 
         return BacktestResult(
-            market_id=spec.market_id,
+            market_id=self.spec.market_id,
             strategy_name=self.strategy.name,
             strategy_params=dict(self.strategy.params),
-            config=cfg,
-            n_bars=len(bars),
-            trades=trades,
+            config=self.config,
+            n_bars=self._n_bars,
+            trades=self.trades,
             equity=equity,
             daily_pnl=daily_pnl,
             metrics=metrics,
-            halts=halts,
+            halts=self.halts,
         )
+
+    # ------------------------------------------------------------------ run --
+    def run(self, bars: list[Bar]) -> BacktestResult:
+        if not bars:
+            raise ValueError("no bars to backtest")
+        self.start()
+        for bar in bars:
+            self.step(bar)
+        return self.finalize(close_open_position=True)
 
 
 def _pnl_by_hour(trades: list[Trade]) -> dict[int, dict]:

@@ -15,3 +15,6 @@ trading_bot/data/features/*
 
 # Manual kill-switch sentinel (presence = halt trading)
 trading_bot/KILL_SWITCH
+
+# Paper-trading session artifacts (state, trade logs)
+trading_bot/paper_runs/

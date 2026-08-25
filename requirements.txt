@@ -1,12 +1,13 @@
-# --- Phase 1 core dependencies (research scaffolding) ---
+# --- Core dependencies ---
 numpy>=1.26
 pandas>=2.2
 PyYAML>=6.0
 pytest>=8.0
+pyarrow>=15.0               # parquet storage for bar data
+scikit-learn>=1.4           # Phase 11: ML setup filters (logistic/RF/HistGB)
 
 # --- Later phases: uncomment when the phase actually starts ---
-# scikit-learn              # Phase 11: ML baselines (logistic regression, random forest)
-# lightgbm                  # Phase 11: gradient boosting (only after simple baselines exist)
+# lightgbm                  # Phase 11: only if HistGradientBoosting proves insufficient
 # matplotlib                # Reporting: equity / drawdown curves
 # databento                 # Phase 2: CME historical data (MNQ) — paid, high quality
 # hyperliquid-python-sdk    # Phase 2+: Hyperliquid market data (research only; live gated)

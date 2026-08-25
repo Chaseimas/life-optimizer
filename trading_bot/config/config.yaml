@@ -64,6 +64,10 @@ logging:
   dir: logs
   console: true
 
+# ---- Alerts (observe only; never control trading) ---------------------------
+alerts:
+  webhook_url: ""              # optional JSON POST target (e.g. Slack webhook)
+
 # ---- Research / experiment tracking -----------------------------------------
 research:
   experiment_log: research/experiment_records.jsonl
