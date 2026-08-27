@@ -22,7 +22,11 @@ project:
 risk:
   max_daily_loss: 1500.0         # ~1.5% of $100k; >= ~3x per-trade risk
   max_risk_per_trade: 0.005      # 0.5% of equity between entry and stop
-  max_position_size: 3           # max contracts (MNQ) / coins (perps) per market
+  # UNITS cap (contracts/coins) is a fat-finger backstop only — the real size
+  # constraint is max_open_exposure in dollars. A small unit cap silently
+  # shrinks low-priced markets to nothing (3 SOL = ~$300) and makes
+  # cross-market comparisons meaningless. Round-1 sweep found exactly that.
+  max_position_size: 1000
   max_trades_per_day: 8
   max_drawdown: 0.10             # 10% off peak equity trips the kill switch
   max_open_exposure: 60000.0     # max total open notional, USD
