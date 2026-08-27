@@ -1,0 +1,11 @@
+{
+  "market_id": "HL:SOL",
+  "interval": "1h",
+  "stage": "processed",
+  "source": "hyperliquid_api",
+  "rows": 4801,
+  "start": "2026-02-08T19:00:00+00:00",
+  "end": "2026-08-27T19:00:00+00:00",
+  "written_at": "2026-08-27T18:17:04.053140+00:00",
+  "notes": "cleaned from hyperliquid_api: in=4801 out=4801 dup=0 nan=0 nonpos=0 incoherent=0 bad_ticks=0 flagged=1 gaps=0 missing_bars=0 session_dropped=0"
+}

@@ -1,0 +1,11 @@
+{
+  "market_id": "HL:BTC",
+  "interval": "1h",
+  "stage": "raw",
+  "source": "hyperliquid_api",
+  "rows": 4801,
+  "start": "2026-02-08T19:00:00+00:00",
+  "end": "2026-08-27T19:00:00+00:00",
+  "written_at": "2026-08-27T18:13:28.555622+00:00",
+  "notes": ""
+}

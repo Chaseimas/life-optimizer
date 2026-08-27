@@ -18,3 +18,4 @@ trading_bot/KILL_SWITCH
 
 # Paper-trading session artifacts (state, trade logs)
 trading_bot/paper_runs/
+life-optimizer/ 
