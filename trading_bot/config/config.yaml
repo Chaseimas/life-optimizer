@@ -15,14 +15,20 @@ project:
   timezone: UTC
 
 # ---- Hard risk limits (account currency = USD) ------------------------------
+# CALIBRATION RULE: limits must be consistent with each other. With
+# max_risk_per_trade = 0.5% of $100k = ~$500/trade, a daily loss limit below
+# ~3x per-trade risk halts the day on ANY single loss — that is not risk
+# control, it is noise. Scale max_daily_loss with the equity you backtest.
 risk:
-  max_daily_loss: 300.0          # stop trading for the day when daily P&L <= -300
+  max_daily_loss: 1500.0         # ~1.5% of $100k; >= ~3x per-trade risk
   max_risk_per_trade: 0.005      # 0.5% of equity between entry and stop
   max_position_size: 3           # max contracts (MNQ) / coins (perps) per market
   max_trades_per_day: 8
   max_drawdown: 0.10             # 10% off peak equity trips the kill switch
   max_open_exposure: 60000.0     # max total open notional, USD
-  max_consecutive_losses: 3      # stop for the day after 3 losses in a row
+  max_consecutive_losses: 5      # stop for the day after 5 losses in a row
+                                 # (sub-30%-win-rate trend strategies hit 3-loss
+                                 # streaks constantly; 5 still catches tilt days)
 
 # ---- Execution --------------------------------------------------------------
 execution:
