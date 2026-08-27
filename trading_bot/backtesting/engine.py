@@ -236,6 +236,7 @@ class BacktestEngine:
             "orders_placed": 0, "filled": 0, "partial_fills": 0,
             "missed_expired": 0, "canceled_by_risk": 0,
             "replaced_by_signal": 0, "unresolved_at_end": 0,
+            "placement_denied_risk": 0, "placement_denied_sizing": 0,
         }
         self._started = True
 
@@ -391,6 +392,10 @@ class BacktestEngine:
                                 reason=self._pending.reason,
                             )
                             self._maker_stats["orders_placed"] += 1
+                        else:
+                            self._maker_stats["placement_denied_risk"] += 1
+                    else:
+                        self._maker_stats["placement_denied_sizing"] += 1
         self._pending = None
 
         # 2b) resting limit order (maker): evaluate against this bar. A fill
@@ -566,6 +571,9 @@ class BacktestEngine:
                     "bars_alive": self._resting.bars_alive,
                 }
                 if self._resting is not None else None
+            ),
+            "maker_stats": (
+                dict(self._maker_stats) if self.config.maker is not None else None
             ),
         }
 

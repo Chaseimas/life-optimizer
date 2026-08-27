@@ -63,6 +63,8 @@ class PaperTrader:
         self._trades_path = self.run_dir / "trades.jsonl"
         self._state_path = self.run_dir / "state.json"
         self._result_path = self.run_dir / "result.json"
+        self._events_path = self.run_dir / "events.jsonl"
+        self._prev_maker_stats: dict | None = None
 
     # ---- persistence ---------------------------------------------------------
     def _write_trade(self, trade: Trade) -> None:
@@ -80,6 +82,45 @@ class PaperTrader:
         state["mode"] = "PAPER"
         self._state_path.write_text(json.dumps(state, indent=2, default=str))
 
+    def _write_event(self, bar, event: str, details: dict) -> None:
+        record = {
+            "wall_ts": datetime.now(timezone.utc).isoformat(),
+            "bar_ts": bar.ts.isoformat(),
+            "bar_close": bar.close,
+            "event": event,
+            "mode": "PAPER",
+            "details": details,
+        }
+        with open(self._events_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+
+    # Simulated-order lifecycle events, reconstructable per bar: placement,
+    # fill/partial, expiry (missed trade), risk cancels, denied placements.
+    _EVENT_KEYS = {
+        "orders_placed": "order_placed",
+        "filled": "order_filled",
+        "partial_fills": "order_partial_fill",
+        "missed_expired": "order_expired_missed",
+        "canceled_by_risk": "order_canceled_by_risk",
+        "replaced_by_signal": "order_replaced_by_signal",
+        "placement_denied_risk": "placement_denied_by_risk",
+        "placement_denied_sizing": "placement_denied_by_sizing",
+    }
+
+    def _emit_maker_events(self, bar, snapshot: dict) -> None:
+        stats = snapshot.get("maker_stats")
+        if stats is None:
+            return
+        prev = self._prev_maker_stats or {k: 0 for k in stats}
+        for key, event in self._EVENT_KEYS.items():
+            if stats.get(key, 0) > prev.get(key, 0):
+                self._write_event(bar, event, {
+                    "resting_order": snapshot.get("resting_order"),
+                    "position": snapshot.get("position"),
+                    "stats": stats,
+                })
+        self._prev_maker_stats = dict(stats)
+
     # ---- run -----------------------------------------------------------------
     def run(self, max_bars: int | None = None,
             close_open_position_at_end: bool = True) -> BacktestResult:
@@ -96,8 +137,17 @@ class PaperTrader:
         try:
             for bar in self.feed.stream():
                 closed = self.engine.step(bar)
+                snapshot = self.engine.snapshot()
+                self._emit_maker_events(bar, snapshot)
                 for trade in closed:
                     self._write_trade(trade)
+                    self._write_event(bar, "trade_closed", {
+                        "direction": trade.direction.name, "size": trade.size,
+                        "entry_price": trade.entry_price, "exit_price": trade.exit_price,
+                        "net_pnl": trade.net_pnl, "fees": trade.fees,
+                        "slippage_cost": trade.slippage_cost, "funding": trade.funding,
+                        "exit_reason": trade.exit_reason,
+                    })
                     self.alerts.notify(
                         "info", "trade_closed",
                         f"{trade.direction.name} {trade.size} {trade.market_id} "

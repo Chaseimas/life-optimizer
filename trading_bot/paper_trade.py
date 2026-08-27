@@ -45,10 +45,17 @@ from trading_bot.strategies.registry import make_strategy
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--market", required=True)
-    p.add_argument("--interval", required=True)
+    p.add_argument("--market")
+    p.add_argument("--interval")
     p.add_argument("--strategy", default="simple_momentum")
     p.add_argument("--params", default="{}")
+    p.add_argument("--frozen", default=None, metavar="CANDIDATE",
+                   help="run a FROZEN research candidate (e.g. orb_eth_15m_maker_p2): "
+                        "strategy, params, market, execution and risk limits are "
+                        "loaded from the immutable frozen definition; overrides refused")
+    p.add_argument("--scenario", default="baseline",
+                   choices=["conservative", "baseline"],
+                   help="frozen only: which frozen maker fill scenario to simulate")
     mode = p.add_mutually_exclusive_group(required=True)
     mode.add_argument("--replay", action="store_true",
                       help="replay the stored processed dataset")
@@ -65,12 +72,42 @@ def main(argv: list[str] | None = None) -> int:
 
     config = load_config()
     setup_logging(config)
+
+    frozen_def = None
+    if args.frozen:
+        from trading_bot.research.frozen import (
+            definition_hash, frozen_backtest_config, frozen_risk_limits, get_frozen,
+        )
+
+        overridden = [name for name, default in (
+            ("--market", None), ("--interval", None), ("--strategy", "simple_momentum"),
+            ("--params", "{}"), ("--equity", 100_000.0), ("--stop-atr", 2.0),
+            ("--atr-period", 14),
+        ) if getattr(args, name.lstrip("-").replace("-", "_")) != default]
+        if overridden:
+            print(f"--frozen refuses overrides: {overridden}. The frozen definition "
+                  "is immutable — parameters cannot drift, silently or otherwise.")
+            return 1
+        frozen_def = get_frozen(args.frozen)
+        args.market = frozen_def["market"]
+        args.interval = frozen_def["interval"]
+    elif not (args.market and args.interval):
+        print("--market and --interval are required (or use --frozen)")
+        return 1
+
     spec = get_market(args.market, config)
 
     print("=" * 72)
     print(" PAPER TRADING — simulated fills on real or replayed data.")
     print(" No orders are sent to any venue. Live trading remains Phase 15,")
     print(" disabled, and gated behind explicit configuration.")
+    if frozen_def:
+        print("-" * 72)
+        print(f" FROZEN CANDIDATE: {args.frozen}  [{args.scenario} fill scenario]")
+        print(f" status: {frozen_def['status']}")
+        print(f" definition sha256: {definition_hash(args.frozen)[:16]}…")
+        print(" Parameters/execution/risk are loaded from the frozen definition;")
+        print(" this session produces forward evidence, not a validated strategy.")
     print("=" * 72)
 
     if args.live_data:
@@ -86,23 +123,39 @@ def main(argv: list[str] | None = None) -> int:
         feed = ReplayFeed(df, spec.market_id)
         print(f"replaying {len(feed)} stored bars through the paper loop")
 
+    prefix = f"frozen_{args.frozen}_{args.scenario}_" if frozen_def else ""
     run_dir = args.run_dir or (
         config.root / "paper_runs" /
-        f"{spec.market_id.replace(':', '_')}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
+        f"{prefix}{spec.market_id.replace(':', '_')}_"
+        f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     )
-    trader = PaperTrader(
-        spec=spec,
-        strategy=make_strategy(args.strategy, json.loads(args.params)),
-        limits=config.risk,
-        config=BacktestConfig(
+    if frozen_def:
+        from trading_bot.research.frozen import frozen_backtest_config, frozen_risk_limits
+
+        strategy = make_strategy(frozen_def["strategy"], dict(frozen_def["params"]))
+        limits = frozen_risk_limits(args.frozen)
+        bt_config = frozen_backtest_config(args.frozen, args.scenario)
+    else:
+        strategy = make_strategy(args.strategy, json.loads(args.params))
+        limits = config.risk
+        bt_config = BacktestConfig(
             initial_equity=args.equity, stop_atr_mult=args.stop_atr,
             atr_period=args.atr_period,
-        ),
+        )
+    trader = PaperTrader(
+        spec=spec,
+        strategy=strategy,
+        limits=limits,
+        config=bt_config,
         feed=feed,
         run_dir=run_dir,
         alerts=build_alert_manager(config),
         kill_switch=KillSwitch(manual_file=config.root / "KILL_SWITCH"),
     )
+    if frozen_def:
+        (trader.run_dir / "frozen_candidate.json").write_text(json.dumps(
+            {"candidate": args.frozen, "scenario": args.scenario,
+             "definition": frozen_def, "mode": "PAPER"}, indent=2))
     result = trader.run(max_bars=args.max_bars)
     print(format_report(result))
     print(f"\nsession artifacts: {run_dir}")

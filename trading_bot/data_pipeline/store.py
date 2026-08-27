@@ -63,6 +63,7 @@ class BarStore:
         stage: str,
         source: str,
         notes: str = "",
+        extra_meta: dict | None = None,
     ) -> Path:
         df = ensure_canonical(df)
         if df.empty:
@@ -81,7 +82,8 @@ class BarStore:
             written_at=datetime.now(timezone.utc).isoformat(),
             notes=notes,
         )
-        path.with_suffix(".meta.json").write_text(json.dumps(asdict(meta), indent=2))
+        record = {**asdict(meta), **(extra_meta or {})}
+        path.with_suffix(".meta.json").write_text(json.dumps(record, indent=2))
         return path
 
     # ---- read ----------------------------------------------------------------

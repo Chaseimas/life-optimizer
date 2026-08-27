@@ -1,5 +1,97 @@
 # Research Findings
 
+# Pass 3 — Evidence Accumulation Infrastructure (2026-08-27)
+
+**No new performance claims are made in this pass, by design.** Pass 3 built
+the machinery for accumulating clean, genuinely independent evidence on the
+Pass-2 candidate without contaminating the experiment. The Pass-2 verdict
+stands unchanged: **INSUFFICIENT EVIDENCE — no tradeable edge demonstrated.
+No live trading is authorized.**
+
+## The frozen candidate (exact definition)
+
+`orb_eth_15m_maker_p2`, defined machine-readably in
+`research/frozen.py` and hash-pinned in `research/frozen_hashes.json` plus
+the test suite (sha256 `1798a7b1d3482d94…`):
+
+* opening_range_breakout {range_start_hour: 0, range_minutes: 60,
+  buffer_frac: 0.0, flat_hour: 23} on HL:ETH @ 15m
+* maker entries (both Pass-2 fill scenarios frozen verbatim: conservative =
+  through-only + 0.5 bp adverse selection, lifetime 2; baseline = prob 0.5 +
+  0.25 bp, lifetime 3), taker exits, ATR(14)×2 stops
+* risk limits snapshot frozen (daily loss $1,500; 0.5%/trade; 10% drawdown
+  kill switch; $60k exposure cap)
+* in-sample boundary: everything through 2026-08-27 19:00 UTC;
+  **OOS starts 2026-08-28 00:00 UTC**
+* pre-registered evaluation: **2026-10-01** (fallback 2026-11-01 if < 30 OOS
+  trades), criteria fixed in advance: positive OOS net under BOTH scenarios,
+  ≥ 30 OOS trades, long-only random-entry control ≥ 95th percentile
+  (200 reps, seed 2026)
+
+Strategy source (`strategies/breakout.py`) and fill-model source
+(`backtesting/maker.py`) are hash-pinned; editing either voids frozen
+evaluations until the freeze is explicitly renewed. Every frozen-evaluation
+invocation is logged; runs before the evaluation date are labeled EARLY PEEK
+in the output and the log, so peeking is visible rather than possible to
+deny.
+
+## Paper-trading methodology
+
+`paper_trade.py --frozen orb_eth_15m_maker_p2 --live-data` runs the frozen
+candidate on live public 15m data through the SAME engine as every backtest
+(simulated maker fills; no orders touch any venue). Overrides are refused —
+the frozen definition cannot drift. Each session writes a full audit trail:
+`frozen_candidate.json` (the definition it ran), `events.jsonl` (every
+order placed / filled / partial / expired-missed / canceled-by-risk /
+denied placement, with bar time and wall time), `trades.jsonl` (entries,
+exits, stops, fees, slippage, funding, net P&L, reasons), `state.json`, and
+`result.json` — all stamped mode=PAPER. Paper fills are simulated fills and
+are never presentable as real fills (audited).
+
+## Data-accumulation methodology
+
+The public API retains only ~5,000 candles/interval, so history exists only
+if we keep it. `fetch accumulate` merges each fetch append-only:
+**previously stored bars are immutable** — if the API later returns
+different values for a stored bar, the discrepancy is detected and reported
+and the original is kept (tested, including the adversarial case). Every
+fetch appends to the dataset's `fetch_history` metadata (when, what span,
+new/overlap/mismatch counts, coverage). Duplicates, off-grid timestamps and
+gaps are detected; gaps are reported, never filled. Raw and processed stay
+separate; contamination of completed experiments is prevented by the
+immutability of old rows plus the frozen OOS timestamp boundary.
+
+## MNQ pipeline status
+
+Groundwork only, fully separate from the crypto candidate: Databento-shaped
+import path with tick-grid validation and DST-aware CME session filtering
+(`fetch mnq --path …`), documented cost assumptions requiring broker
+verification, and a session-anchored (08:30 America/Chicago, DST-tested)
+opening-range utility for FUTURE exploratory MNQ work — no MNQ strategy has
+been run, and the maker fill model's crypto assumptions are explicitly not
+assumed valid for CME. Blocked on purchasing Databento history.
+
+## Integrity automation
+
+`python -m trading_bot.research.integrity` audits: frozen definition +
+source hashes, experiment-log id uniqueness, post-freeze parameter tuning on
+the candidate's market/interval (unlabeled exploratory work is flagged),
+early-peek accounting, cost transparency of pass-3+ records, per-strategy
+experiment counts (selection-bias denominator), and PAPER stamping of paper
+artifacts. The live audit of this repository is itself a test — the suite
+fails if the repo stops passing its own integrity checks. Current status:
+CLEAN.
+
+## Next evaluation
+
+On or after **2026-10-01**: accumulate data, then
+`python -m trading_bot.research.frozen_eval --candidate orb_eth_15m_maker_p2`.
+Until then: accumulate (ideally at least weekly, since 15m depth is ~52
+days) and let the paper session run. **Do not tune. Do not peek for
+comfort. No live trading is authorized.**
+
+---
+
 # Pass 2 — Maker Execution (2026-08-27)
 
 **VERDICT: INSUFFICIENT EVIDENCE.** No tradeable edge has been demonstrated.

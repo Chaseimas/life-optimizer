@@ -118,6 +118,45 @@ def cmd_synthetic(args, config) -> int:
     return 0
 
 
+def cmd_accumulate(args, config) -> int:
+    from trading_bot.data_pipeline.accumulate import accumulate_candles
+
+    store = _store(config)
+    failures = 0
+    for coin in args.coins:
+        market_id = f"HL:{coin.upper()}"
+        get_market(market_id)
+        for interval in args.intervals:
+            try:
+                report = accumulate_candles(
+                    store, market_id, coin.upper(), interval, days=args.days,
+                    funding_fetch_fn=(hl.fetch_funding if args.funding else None),
+                )
+            except Exception as e:  # keep going: one market failing must not stop the rest
+                print(f"FAILED  {market_id}@{interval}: {e}")
+                failures += 1
+                continue
+            print(f"OK      {report.summary()}")
+            if report.overlap_mismatches:
+                print(f"        WARNING: {report.overlap_mismatches} stored bars differ "
+                      "from what the API now returns — stored history kept, see meta")
+            if report.funding_new_rows is not None:
+                print(f"        funding: +{report.funding_new_rows} rows "
+                      f"({report.funding_mismatches} mismatches)")
+    return 1 if failures else 0
+
+
+def cmd_mnq(args, config) -> int:
+    from trading_bot.data_pipeline.mnq import MNQ_COST_ASSUMPTIONS, import_mnq_csv
+
+    report = import_mnq_csv(_store(config), args.path, interval=args.interval)
+    print(report.summary())
+    for note in report.notes:
+        print(f"  note: {note}")
+    print(f"cost assumptions in force: {MNQ_COST_ASSUMPTIONS}")
+    return 0
+
+
 def cmd_catalog(args, config) -> int:
     entries = _store(config).catalog()
     if not entries:
@@ -153,12 +192,32 @@ def main(argv: list[str] | None = None) -> int:
     p_csv.add_argument("--no-session-filter", action="store_true")
     p_csv.set_defaults(fn=cmd_csv)
 
+    p_mnq = sub.add_parser(
+        "mnq",
+        help="import a Databento-shaped MNQ CSV through the validated MNQ "
+             "pipeline (tick validation, CME session filter, cleaning)",
+    )
+    p_mnq.add_argument("--path", required=True)
+    p_mnq.add_argument("--interval", required=True)
+    p_mnq.set_defaults(fn=cmd_mnq)
+
     p_syn = sub.add_parser("synthetic", help="generate labeled synthetic data")
     p_syn.add_argument("--market", default="SYNTH")
     p_syn.add_argument("--interval", default="5m")
     p_syn.add_argument("--bars", type=int, default=20000)
     p_syn.add_argument("--seed", type=int, default=42)
     p_syn.set_defaults(fn=cmd_synthetic)
+
+    p_acc = sub.add_parser(
+        "accumulate",
+        help="append-only merge of fresh candles into stored history "
+             "(old rows immutable; anomalies detected; fetch audit trail kept)",
+    )
+    p_acc.add_argument("--coins", nargs="+", default=["BTC", "ETH", "SOL"])
+    p_acc.add_argument("--intervals", nargs="+", default=["15m", "1h"])
+    p_acc.add_argument("--days", type=int, default=50)
+    p_acc.add_argument("--funding", action="store_true", help="also accumulate funding")
+    p_acc.set_defaults(fn=cmd_accumulate)
 
     p_cat = sub.add_parser("catalog", help="list stored datasets")
     p_cat.set_defaults(fn=cmd_catalog)
