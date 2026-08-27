@@ -32,8 +32,17 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+import numpy as np
+
 from trading_bot.backtesting.execution import check_protective_exit, market_fill
 from trading_bot.backtesting.fees import fee_for_fill
+from trading_bot.backtesting.maker import (
+    MakerParams,
+    RestingOrder,
+    adverse_selection_cost,
+    evaluate_fill,
+    limit_price_for,
+)
 from trading_bot.backtesting.metrics import (
     TRADING_DAYS_CRYPTO,
     TRADING_DAYS_FUTURES,
@@ -68,6 +77,10 @@ class BacktestConfig:
     slippage: SlippageModel | None = None    # None -> venue-appropriate default
     liquidity: Liquidity = Liquidity.TAKER
     allow_short: bool = True
+    # Maker execution for ENTRIES (exits stay taker). None = classic taker
+    # entries (fully backward compatible). See backtesting/maker.py for the
+    # model, its assumptions, and what OHLC data cannot honestly provide.
+    maker: MakerParams | None = None
     label: str = ""
 
 
@@ -105,10 +118,14 @@ class _Position:
     stop_price: float | None
     tp_price: float | None
     entry_fee: float
-    entry_slippage: float
+    entry_slippage: float       # taker: informational (already inside gross);
+                                # maker: the adverse-selection charge
     entry_reason: str
     funding_paid: float = 0.0
     bars_held: int = 0
+    # Cash costs NOT embedded in fill prices (maker adverse-selection charge);
+    # subtracted from net P&L at close. Always 0 for taker entries.
+    extra_costs: float = 0.0
 
 
 @dataclass
@@ -183,6 +200,8 @@ class BacktestEngine:
             if spec.fees.mode is FeeMode.PER_CONTRACT
             else BpsSlippage(1.0)
         )
+        if self.config.maker is not None:
+            self.config.maker.validate()
         self._external_kill_switch = kill_switch
         self._started = False
 
@@ -208,7 +227,22 @@ class BacktestEngine:
         self._last_close: float | None = None
         self._n_bars = 0
         self._new_trades_this_step: list[Trade] = []
+        self._resting: RestingOrder | None = None
+        self._maker_rng = (
+            np.random.default_rng(self.config.maker.seed)
+            if self.config.maker is not None else None
+        )
+        self._maker_stats = {
+            "orders_placed": 0, "filled": 0, "partial_fills": 0,
+            "missed_expired": 0, "canceled_by_risk": 0,
+            "replaced_by_signal": 0, "unresolved_at_end": 0,
+        }
         self._started = True
+
+    def _cancel_resting(self, why: str) -> None:
+        if self._resting is not None:
+            self._maker_stats[why] += 1
+            self._resting = None
 
     # ------------------------------------------------------------- internals --
     def _close_position(self, pos: _Position, ref_price: float, ts: datetime,
@@ -220,7 +254,7 @@ class BacktestEngine:
         exit_fee = fee_for_fill(spec, fill, pos.size, cfg.liquidity)
         gross = spec.pnl(pos.direction, pos.entry_fill, fill, pos.size)
         fees = pos.entry_fee + exit_fee
-        net = gross - fees - pos.funding_paid
+        net = gross - fees - pos.funding_paid - pos.extra_costs
         trade = Trade(
             market_id=spec.market_id,
             direction=pos.direction,
@@ -276,6 +310,8 @@ class BacktestEngine:
         # 2) previous bar's signal executes at this bar's open
         if self._pending is not None and not self.stopped:
             desired = self._pending.direction
+            if self._resting is not None and desired is not self._resting.direction:
+                self._cancel_resting("replaced_by_signal")
             if self.position is not None and desired is not self.position.direction:
                 self._close_position(
                     self.position, bar.open, bar.ts,
@@ -284,6 +320,7 @@ class BacktestEngine:
                 self.position = None
             if (
                 self.position is None
+                and self._resting is None
                 and desired is not Side.FLAT
                 and (cfg.allow_short or desired is Side.LONG)
             ):
@@ -293,42 +330,128 @@ class BacktestEngine:
                     or (cfg.stop_atr_mult * self._atr.value
                         if cfg.stop_atr_mult and self._atr.value else None)
                 )
-                sizing = compute_position_size(
-                    equity=risk.equity,
-                    price=bar.open,
-                    stop_distance=stop_dist if stop_dist else 0.0,
-                    spec=spec,
-                    limits=self.limits,
-                    risk_per_trade=cfg.risk_per_trade,
+                tp_dist = (
+                    cfg.fixed_tp_points
+                    or (cfg.tp_atr_mult * self._atr.value
+                        if cfg.tp_atr_mult and self._atr.value else None)
                 )
-                if sizing.size > 0:
-                    decision = risk.pre_trade_check(proposed_notional=sizing.notional)
-                    if decision:
-                        entry_dir = int(desired)
-                        fill, slip_in = market_fill(
-                            spec, entry_dir, bar.open, sizing.size, self.slippage
-                        )
-                        tp_dist = (
-                            cfg.fixed_tp_points
-                            or (cfg.tp_atr_mult * self._atr.value
-                                if cfg.tp_atr_mult and self._atr.value else None)
-                        )
-                        self.position = _Position(
-                            direction=desired,
-                            size=sizing.size,
-                            entry_ts=bar.ts,
-                            entry_fill=fill,
-                            stop_price=spec.round_price(fill - entry_dir * stop_dist),
-                            tp_price=(
-                                spec.round_price(fill + entry_dir * tp_dist)
-                                if tp_dist else None
-                            ),
-                            entry_fee=fee_for_fill(spec, fill, sizing.size, cfg.liquidity),
-                            entry_slippage=slip_in,
-                            entry_reason=self._pending.reason,
-                        )
-                        risk.record_trade_opened()
+                if cfg.maker is None:
+                    # ---- taker entry: marketable at this bar's open ----------
+                    sizing = compute_position_size(
+                        equity=risk.equity,
+                        price=bar.open,
+                        stop_distance=stop_dist if stop_dist else 0.0,
+                        spec=spec,
+                        limits=self.limits,
+                        risk_per_trade=cfg.risk_per_trade,
+                    )
+                    if sizing.size > 0:
+                        decision = risk.pre_trade_check(proposed_notional=sizing.notional)
+                        if decision:
+                            entry_dir = int(desired)
+                            fill, slip_in = market_fill(
+                                spec, entry_dir, bar.open, sizing.size, self.slippage
+                            )
+                            self.position = _Position(
+                                direction=desired,
+                                size=sizing.size,
+                                entry_ts=bar.ts,
+                                entry_fill=fill,
+                                stop_price=spec.round_price(fill - entry_dir * stop_dist),
+                                tp_price=(
+                                    spec.round_price(fill + entry_dir * tp_dist)
+                                    if tp_dist else None
+                                ),
+                                entry_fee=fee_for_fill(spec, fill, sizing.size, cfg.liquidity),
+                                entry_slippage=slip_in,
+                                entry_reason=self._pending.reason,
+                            )
+                            risk.record_trade_opened()
+                else:
+                    # ---- maker entry: place a resting limit off this open ----
+                    limit = limit_price_for(spec, desired, bar.open, cfg.maker)
+                    sizing = compute_position_size(
+                        equity=risk.equity,
+                        price=limit,
+                        stop_distance=stop_dist if stop_dist else 0.0,
+                        spec=spec,
+                        limits=self.limits,
+                        risk_per_trade=cfg.risk_per_trade,
+                    )
+                    if sizing.size > 0 and stop_dist:
+                        decision = risk.pre_trade_check(proposed_notional=sizing.notional)
+                        if decision:
+                            self._resting = RestingOrder(
+                                direction=desired,
+                                limit_price=limit,
+                                size=sizing.size,
+                                stop_distance=stop_dist,
+                                tp_distance=tp_dist,
+                                placed_ts=bar.ts,
+                                reason=self._pending.reason,
+                            )
+                            self._maker_stats["orders_placed"] += 1
         self._pending = None
+
+        # 2b) resting limit order (maker): evaluate against this bar. A fill
+        # can happen the same bar the order is placed; a filled position is
+        # then subject to this bar's protective-exit check (conservative).
+        if self._resting is not None:
+            if self.stopped or risk.halted_for_day:
+                self._cancel_resting("canceled_by_risk")
+            else:
+                order = self._resting
+                event = evaluate_fill(
+                    bar, order.direction, order.limit_price, cfg.maker, self._maker_rng
+                )
+                filled = False
+                if event is not None:
+                    fill_size = spec.round_size(order.size * event.fraction)
+                    size_ok = fill_size >= spec.min_size and (
+                        not spec.min_notional
+                        or spec.notional(event.price, fill_size) >= spec.min_notional
+                    )
+                    if size_ok:
+                        decision = risk.pre_trade_check(
+                            proposed_notional=spec.notional(event.price, fill_size)
+                        )
+                        if decision:
+                            adverse = adverse_selection_cost(
+                                spec, event.price, fill_size, cfg.maker
+                            )
+                            d = int(order.direction)
+                            self.position = _Position(
+                                direction=order.direction,
+                                size=fill_size,
+                                entry_ts=bar.ts,
+                                entry_fill=event.price,
+                                stop_price=spec.round_price(
+                                    event.price - d * order.stop_distance
+                                ),
+                                tp_price=(
+                                    spec.round_price(event.price + d * order.tp_distance)
+                                    if order.tp_distance else None
+                                ),
+                                entry_fee=fee_for_fill(
+                                    spec, event.price, fill_size, Liquidity.MAKER
+                                ),
+                                entry_slippage=adverse,
+                                entry_reason=order.reason,
+                                extra_costs=adverse,
+                            )
+                            risk.record_trade_opened()
+                            self._maker_stats["filled"] += 1
+                            if event.fraction < 1.0:
+                                self._maker_stats["partial_fills"] += 1
+                            self._resting = None
+                            filled = True
+                        else:
+                            self._cancel_resting("canceled_by_risk")
+                if self._resting is not None and not filled:
+                    self._resting.bars_alive += 1
+                    if self._resting.bars_alive >= cfg.maker.max_lifetime_bars:
+                        self._resting = None
+                        self._maker_stats["missed_expired"] += 1
 
         # 3) protective exits against this bar's range
         if self.position is not None:
@@ -372,6 +495,7 @@ class BacktestEngine:
         if risk.kill_switch.is_tripped and not self.stopped:
             self.stopped = True
             self._pending = None
+            self._cancel_resting("canceled_by_risk")
             self.halts.append(f"{bar.ts.isoformat()} KILL SWITCH — run stopped")
             if self.position is not None:
                 self._flatten_reason = "kill_switch"
@@ -391,7 +515,7 @@ class BacktestEngine:
                 self.position.size,
             )
             mtm = (risk.equity + unrealized - self.position.entry_fee
-                   - self.position.funding_paid)
+                   - self.position.funding_paid - self.position.extra_costs)
         else:
             mtm = risk.equity
         self._equity_ts.append(bar.ts)
@@ -434,6 +558,15 @@ class BacktestEngine:
             "kill_switch_tripped": self.risk.kill_switch.is_tripped,
             "stopped": self.stopped,
             "halts": list(self.halts),
+            "resting_order": (
+                {
+                    "direction": self._resting.direction.name,
+                    "limit_price": self._resting.limit_price,
+                    "size": self._resting.size,
+                    "bars_alive": self._resting.bars_alive,
+                }
+                if self._resting is not None else None
+            ),
         }
 
     # ------------------------------------------------------------- finalize --
@@ -479,6 +612,17 @@ class BacktestEngine:
             if self.trades else None
         )
         metrics["pnl_by_entry_hour_utc"] = _pnl_by_hour(self.trades)
+        metrics["execution_model"] = (
+            "taker" if self.config.maker is None else "maker_entry_taker_exit"
+        )
+        if self.config.maker is not None:
+            if self._resting is not None:
+                self._maker_stats["unresolved_at_end"] += 1
+                self._resting = None
+            stats = dict(self._maker_stats)
+            placed = stats["orders_placed"]
+            stats["fill_rate"] = (stats["filled"] / placed) if placed else None
+            metrics["maker"] = {**self.config.maker.describe(), **stats}
 
         return BacktestResult(
             market_id=self.spec.market_id,

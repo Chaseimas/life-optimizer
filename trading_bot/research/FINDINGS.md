@@ -1,4 +1,112 @@
-# Research Findings — Pass 1 (2026-08-27)
+# Research Findings
+
+# Pass 2 — Maker Execution (2026-08-27)
+
+**VERDICT: INSUFFICIENT EVIDENCE.** No tradeable edge has been demonstrated.
+One candidate (ORB-15m on ETH under maker execution) survived walk-forward,
+scenario stress, and two of three beta controls — but the decisive long-only
+control came in at the 93rd percentile, below the pre-declared 95% bar, on
+52 days of one parabolic regime in one market. That is a candidate worth
+re-testing on more data, not an edge.
+
+## 1. What was built
+
+Maker (limit-order) entry execution in the existing engine
+(`backtesting/maker.py` + `BacktestConfig.maker`; `maker=None` keeps the
+original taker path bit-for-bit — verified by the untouched existing suite).
+Entries become resting limit orders placed at the next bar's open ± a
+configurable offset; **exits stay taker by design** (a protective stop that
+might not fill is not a stop). Round-trip cost is therefore ~7 bps
+(1.5 maker + 4.5 taker + 1 exit slippage), not the 3 bps fee-table fantasy.
+20 new tests cover fills, misses, expiry, partials, adverse selection,
+same-bar stops, risk/kill-switch interaction, and determinism (277 total).
+
+## 2. How fills are modeled, and what OHLC cannot honestly provide
+
+Documented in full in `backtesting/maker.py`. Three assumptions are
+unavoidable with OHLC-only data, and each is an explicit parameter, not a
+hidden default: queue position is unknowable (fill modes: "through" = only
+when price sweeps past the limit; "touch" = optimistic upper bound, never
+used for conclusions; "prob" = seeded coin-flip on touch); adverse selection
+beyond the structural effect is charged as an explicit per-fill cost in bps
+of notional; intrabar path is unknown (same-bar stop after fill is assumed —
+the conservative direction). Three named scenarios: conservative / baseline /
+optimistic. All conclusions come from the first two.
+
+## 3. Taker vs maker — broad sweep (all 5 strategies × 5 datasets × 4 models)
+
+**Maker execution does not rescue losing strategies.** 19 of 25 cells stay
+negative under both honest scenarios. Fill rates ran 88–100%: at 15m/1h
+crypto volatility a passive limit at the open is almost always touched, so
+maker ≈ taker − ~4 bps, with a small missed-trade effect. The cost thesis
+from Pass 1 ("gross-positive momentum might survive lower fees") is
+**rejected**: momentum-1h stayed unprofitable or scenario-unstable
+(BTC: +$2.4k conservative but −$1.5k baseline — sign flips with the fill
+assumption = noise).
+
+## 4–7. Which strategies improved / survived
+
+Improved but still losing: mean-reversion and VWAP variants (~$1–5k less bad
+— fee savings, nothing more). ORB-15m **BTC failed** scenario robustness
+(+$2.5k conservative, +$6 baseline: the extra fills granted by generous
+assumptions are precisely the adverse-selected ones). **ORB-15m ETH is the
+sole survivor**: walk-forward OOS +$5.8k/+$5.9k (conservative/baseline),
+PF 1.46, Sharpe ~1.9, 48 OOS trades, stable chosen params (60-min range).
+
+## 8. Does maker execution change the beta-control conclusion?
+
+Partially — and not enough. Full-fidelity random-entry controls (same
+engine, maker model, stops, sizing, costs, matched directions and holding
+times, 200 reps):
+
+| control | actual percentile | bar |
+|---|---|---|
+| mixed, maker baseline | 97% | ≥95% |
+| mixed, maker conservative | 98% | ≥95% |
+| **long-only** (the side with all the P&L) | **93%** | **≥95% — FAILED** |
+| hour-matched mixed | 96% | ≥95% |
+
+The mixed controls pass partly because random shorts are destroyed in a
++42.8% window while the strategy's shorts broke even (−$175 on 38 trades).
+The long side alone — +$10.8k of the +$10.6k total — does **not** separate
+from random long entries at the required level. Pass 1's conclusion
+(taker, long-only control at 67%) improves to 93% under maker, but the bar
+is 95% and the sample is 45 trades in one regime.
+
+## 9. Sensitivity to worse fills
+
+The ETH result was robust across the stress grid: adverse selection up to
+2 bps (net $10.6k → $9.8k), lifetime 1–5 bars, partial fills 50%, fill
+probability 0.25–0.75, three RNG seeds — all stayed in the $9.8–11.3k band.
+(A 5 bps limit offset *raised* net to $12.1k at an 88% fill rate; noted as
+an observation only — selecting it post-hoc is exactly the cherry-picking
+this protocol bans.)
+
+## 10. Monte Carlo (bootstrap, OOS trades, maker baseline)
+
+48 OOS trades: median +$4.4k, p5 −$9.6k, p95 +$27.0k,
+**P(total ≤ 0) = 33.8%**, p95 drawdown $10.9k, p95 losing streak 16.
+Top-3 wins ($16.8k) still exceed total net ($10.6k): outlier-dependent.
+
+## 11. Explicit conclusion
+
+**INSUFFICIENT EVIDENCE. No tradeable edge has been demonstrated.**
+For: survived walk-forward under both honest fill scenarios; robust to
+execution-assumption stress; 96–98% on mixed/hour-matched controls.
+Against: long-only control 93% (< 95% bar); one market; 52 days; one
+parabolic +43% regime; outlier-dependent; P(≤0) ≈ 34%.
+
+What would resolve it, in order of value: (1) more 15m history — the public
+archive deepens daily, so re-running this exact protocol in 4–8 weeks adds
+true out-of-sample data including, eventually, a non-bull regime; (2) the
+same protocol on MNQ (Databento) for an uncorrelated venue and a
+session-anchored range; (3) forward paper trading of ORB-15m-ETH with maker
+entries — zero-risk true out-of-sample evidence via the existing paper
+trader. Do NOT trade this live; nothing here meets the bar.
+
+---
+
+# Pass 1 (2026-08-27)
 
 **Verdict: NO TRADEABLE EDGE FOUND YET.** One candidate looked good through
 two rounds of testing and was then killed by a beta control. That is the
