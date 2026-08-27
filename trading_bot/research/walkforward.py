@@ -120,7 +120,12 @@ def run_walkforward(
     step_bars: int | None = None,
     embargo_bars: int = 0,
     selection_metric: str = "sharpe",
+    strategy_factory=None,
+    funding=None,
 ) -> WalkForwardResult:
+    """``strategy_factory(params) -> BaseStrategy`` overrides registry lookup
+    (needed for strategies requiring non-parameter inputs, e.g. a funding
+    series). ``funding`` is passed to every engine run (cost accrual)."""
     if selection_metric not in SELECTION_METRICS:
         raise ValueError(f"selection_metric must be one of {SELECTION_METRICS}")
     if not grid:
@@ -133,13 +138,14 @@ def run_walkforward(
             f"+ test={test_bars}"
         )
 
-    probe = make_strategy(strategy_name, grid[0])
+    factory = strategy_factory or (lambda params: make_strategy(strategy_name, params))
+    probe = factory(grid[0])
     warmup = max(probe.warmup_bars, bt_config.atr_period) + 5
 
     def run_slice(params: dict, start_idx: int, end_idx: int) -> BacktestResult:
-        inner = make_strategy(strategy_name, params)
+        inner = factory(params)
         gated = _WarmupGate(inner, live_from=bars[start_idx].ts)
-        engine = BacktestEngine(spec, gated, limits, bt_config)
+        engine = BacktestEngine(spec, gated, limits, bt_config, funding=funding)
         return engine.run(_slice_with_warmup(bars, start_idx, end_idx, warmup))
 
     windows: list[WindowResult] = []

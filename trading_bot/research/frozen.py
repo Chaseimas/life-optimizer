@@ -35,8 +35,9 @@ HASHES_PATH = Path(__file__).resolve().parent / "frozen_hashes.json"
 # Editing them after the freeze voids prior frozen evaluations until the
 # freeze is explicitly renewed (update hashes + say so in FINDINGS.md).
 FROZEN_SOURCE_FILES = (
-    "strategies/breakout.py",   # the strategy logic
-    "backtesting/maker.py",     # the fill model semantics
+    "strategies/breakout.py",       # ORB candidate strategy logic
+    "strategies/funding_carry.py",  # funding-carry candidate strategy logic
+    "backtesting/maker.py",         # the fill model semantics
 )
 
 FROZEN_CANDIDATES: dict[str, dict] = {
@@ -115,6 +116,81 @@ FROZEN_CANDIDATES: dict[str, dict] = {
             "93% vs 95% bar; one market; 52 days; one +43% regime; "
             "outlier-dependent; OOS bootstrap P(<=0)=34%). Live trading is "
             "NOT authorized."
+        ),
+    },
+    "funding_carry_btc_1h_p4": {
+        "frozen_at": "2026-08-27",
+        "frozen_in_pass": 4,
+        "status": "INSUFFICIENT EVIDENCE — research candidate only, NOT validated",
+        "strategy": "funding_carry",
+        "params": {
+            "lookback_hours": 24,
+            "rank_window_hours": 720,
+            "entry_pctile": 0.9,
+            "neutral_band": 0.10,
+        },
+        "market": "HL:BTC",
+        "interval": "1h",
+        "backtest": {
+            "initial_equity": 100_000.0,
+            "risk_per_trade": None,
+            "fixed_stop_points": None,
+            "fixed_tp_points": None,
+            "stop_atr_mult": 2.0,
+            "tp_atr_mult": None,
+            "atr_period": 14,
+            "allow_short": True,
+        },
+        "maker_scenarios": {
+            "conservative": {
+                "limit_offset_bps": 0.0, "max_lifetime_bars": 2,
+                "fill_on": "through", "penetration_bps": 1.0,
+                "touch_fill_prob": 0.5, "partial_fill_frac": 1.0,
+                "min_fill_frac": 0.1, "adverse_selection_bps": 0.5, "seed": 7,
+            },
+            "baseline": {
+                "limit_offset_bps": 0.0, "max_lifetime_bars": 3,
+                "fill_on": "prob", "penetration_bps": 1.0,
+                "touch_fill_prob": 0.5, "partial_fill_frac": 1.0,
+                "min_fill_frac": 0.1, "adverse_selection_bps": 0.25, "seed": 7,
+            },
+        },
+        "risk_limits": {
+            "max_daily_loss": 1500.0,
+            "max_risk_per_trade": 0.005,
+            "max_position_size": 1000,
+            "max_trades_per_day": 8,
+            "max_drawdown": 0.10,
+            "max_open_exposure": 60000.0,
+            "max_consecutive_losses": 5,
+        },
+        "data_used_through": "2026-08-27T19:00:00+00:00",
+        "oos_start": "2026-08-28T00:00:00+00:00",
+        # ~0.25 trades/day -> a meaningful trade count needs months, and the
+        # strategy also needs live funding-rate history accumulated:
+        "planned_evaluation_date": "2026-11-30",
+        "fallback_evaluation_date": "2027-01-31",
+        "evaluation_criteria": {
+            "min_oos_trades": 20,
+            "require_positive_net_in_scenarios": ["conservative", "baseline"],
+            # Both sides trade, so the control is mixed + per-side:
+            "beta_control_mode": "mixed_and_sides",
+            "mixed_beta_control_min_percentile": 0.95,
+            "side_beta_control_min_percentile": 0.90,
+            "beta_control_replicates": 200,
+            "beta_control_seed": 2026,
+            "if_min_trades_not_met": "extend to fallback_evaluation_date",
+        },
+        "notes": (
+            "Pass-4 verdict: INSUFFICIENT EVIDENCE, strongest candidate to "
+            "date. For: OOS +$5.6-6.1k across taker AND both maker scenarios "
+            "(PF 1.7-1.8, Sharpe ~1.8, maxDD <4%), perfectly stable WF params, "
+            "both sides profitable, made money in the -13% bear third, robust "
+            "to 2x fees + 3x slippage. Against: 30 OOS trades; 1-of-3 markets "
+            "(ETH/SOL failed); per-side controls 92-94% (mixed 96-98% "
+            "separates); bootstrap P(<=0)=29%; one 200-day window; ~8 strategy "
+            "families tested on the same data (multiple-comparisons debt). "
+            "Live trading is NOT authorized."
         ),
     },
 }

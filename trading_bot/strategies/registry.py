@@ -7,6 +7,7 @@ from trading_bot.strategies.breakout import OpeningRangeBreakout
 from trading_bot.strategies.mean_reversion import ZScoreMeanReversion
 from trading_bot.strategies.momentum import SimpleMomentum
 from trading_bot.strategies.regime import RegimeGatedMomentum
+from trading_bot.strategies.vol_breakout import VolatilityBreakout
 from trading_bot.strategies.vwap import RollingVWAPStrategy
 
 STRATEGY_REGISTRY: dict[str, type[BaseStrategy]] = {
@@ -15,6 +16,10 @@ STRATEGY_REGISTRY: dict[str, type[BaseStrategy]] = {
     RollingVWAPStrategy.name: RollingVWAPStrategy,
     OpeningRangeBreakout.name: OpeningRangeBreakout,
     RegimeGatedMomentum.name: RegimeGatedMomentum,
+    VolatilityBreakout.name: VolatilityBreakout,
+    # funding_carry is deliberately NOT here: it requires a funding series at
+    # construction, which name-based CLIs cannot supply. Research code
+    # constructs it directly; walk-forward uses strategy_factory.
 }
 
 

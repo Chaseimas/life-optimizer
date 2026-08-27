@@ -1,10 +1,12 @@
 {
   "comment": "Expected hashes for frozen research candidates and their pinned source files. Changing any frozen value requires editing this file too - deliberately loud in git history.",
   "candidates": {
-    "orb_eth_15m_maker_p2": "1798a7b1d3482d944c2c37f34fb4e1d8a9cd130cf09440494d3b4a208a8b93bf"
+    "orb_eth_15m_maker_p2": "1798a7b1d3482d944c2c37f34fb4e1d8a9cd130cf09440494d3b4a208a8b93bf",
+    "funding_carry_btc_1h_p4": "8301f4f09600cc59fca4dec94d9206954cbaea83bfb507f17cbeec992f4a2161"
   },
   "source_files": {
     "strategies/breakout.py": "3d71d19d1c325f8fa4b56d2fd135b8535ab0b4d7469f14d1699c0c1bc4cd39b5",
+    "strategies/funding_carry.py": "4744fc30f223769cc51c003d63a3e56e585d1100ee87f4efed65d14278edb3e6",
     "backtesting/maker.py": "81b857f3f61024a783ff92b908403d3182c625b17ee8fca3cdfa7ca350166a7f"
   }
 }

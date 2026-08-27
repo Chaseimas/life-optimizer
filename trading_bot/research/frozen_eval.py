@@ -47,6 +47,21 @@ WARMUP_BARS = 100  # bars before oos_start fed through the signal gate (indicato
                    # warm up; the gate makes trading on them impossible)
 
 
+def _build_strategy(frozen: dict, funding):
+    """Construct the frozen strategy. Strategies needing non-parameter inputs
+    (funding series) are handled explicitly — never through hidden state."""
+    if frozen["strategy"] == "funding_carry":
+        from trading_bot.strategies.funding_carry import FundingCarry
+
+        if funding is None:
+            raise ValueError(
+                "funding_carry evaluation requires stored funding history for "
+                f"{frozen['market']} — accumulate it first"
+            )
+        return FundingCarry(dict(frozen["params"]), funding=funding)
+    return make_strategy(frozen["strategy"], dict(frozen["params"]))
+
+
 def evaluate(candidate_name: str, *, as_of: str | None = None,
              skip_control: bool = False, log_experiment: bool = True,
              store: BarStore | None = None) -> dict:
@@ -96,7 +111,7 @@ def evaluate(candidate_name: str, *, as_of: str | None = None,
     criteria = frozen["evaluation_criteria"]
     scenario_results = {}
     for scenario in frozen["maker_scenarios"]:
-        strategy = make_strategy(frozen["strategy"], dict(frozen["params"]))
+        strategy = _build_strategy(frozen, funding)
         gated = _WarmupGate(strategy, live_from=live_from)
         bt_config = frozen_backtest_config(candidate_name, scenario)
         engine = BacktestEngine(spec, gated, limits, bt_config, funding=funding)
@@ -129,23 +144,49 @@ def evaluate(candidate_name: str, *, as_of: str | None = None,
 
     if not skip_control and n_trades > 0:
         base_result, _ = scenario_results["baseline"]
-        longs = [t for t in base_result.trades if t.direction is Side.LONG]
-        if longs:
-            control = run_random_entry_control(
+        bt_cfg = frozen_backtest_config(candidate_name, "baseline")
+        mode = criteria.get("beta_control_mode", "long_only")
+
+        def control_for(directions):
+            return run_random_entry_control(
                 spec=spec, bars=bars, trades=base_result.trades,
-                bt_config=frozen_backtest_config(candidate_name, "baseline"),
-                limits=limits, funding=funding, directions=(Side.LONG,),
+                bt_config=bt_cfg, limits=limits, funding=funding,
+                directions=directions,
                 n_replicates=criteria["beta_control_replicates"],
                 seed=criteria["beta_control_seed"],
             )
-            out["long_only_beta_control"] = control.describe()
-            checks["long_only_control_ge_95"] = (
-                control.actual_percentile
-                >= criteria["long_only_beta_control_min_percentile"]
-            )
+
+        if mode == "long_only":
+            longs = [t for t in base_result.trades if t.direction is Side.LONG]
+            if longs:
+                control = control_for((Side.LONG,))
+                out["long_only_beta_control"] = control.describe()
+                checks["long_only_control_ge_95"] = (
+                    control.actual_percentile
+                    >= criteria["long_only_beta_control_min_percentile"]
+                )
+            else:
+                checks["long_only_control_ge_95"] = False
+                out["long_only_beta_control"] = "no long trades in OOS window"
+        elif mode == "mixed_and_sides":
+            controls = {}
+            ok = True
+            mixed = control_for((Side.LONG, Side.SHORT))
+            controls["mixed"] = mixed.describe()
+            ok &= mixed.actual_percentile >= criteria["mixed_beta_control_min_percentile"]
+            for label, side in (("long", Side.LONG), ("short", Side.SHORT)):
+                if any(t.direction is side for t in base_result.trades):
+                    c = control_for((side,))
+                    controls[label] = c.describe()
+                    ok &= (c.actual_percentile
+                           >= criteria["side_beta_control_min_percentile"])
+                else:
+                    controls[label] = f"no {label} trades in OOS window"
+                    ok = False
+            out["beta_controls"] = controls
+            checks["beta_controls_meet_preregistered_bars"] = bool(ok)
         else:
-            checks["long_only_control_ge_95"] = False
-            out["long_only_beta_control"] = "no long trades in OOS window"
+            raise ValueError(f"unknown beta_control_mode {mode!r}")
 
     out["criteria_checks"] = checks
     if not checks["min_oos_trades"]:

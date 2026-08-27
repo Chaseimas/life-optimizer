@@ -1,5 +1,130 @@
 # Research Findings
 
+# Pass 4 — $400/Day Robustness & Edge Discovery (2026-08-27)
+
+**Overall system verdict: D — no validated edge exists yet.** Conditionally
+— IF the strongest candidate survives its pre-registered out-of-sample
+evaluation — the answer becomes B: $400/day appears achievable only with
+more capital (~$750k at measured performance). $400/day on $100k under
+current evidence sits between C and impossible: sizing up the best candidate
+DEGRADED it. All Pass-1–3 conclusions stand unmodified.
+
+## The target's mathematics (research/target_math.py, tested)
+
+$400/day on $100k = 0.40%/day average. At 1% daily P&L volatility that is an
+annualized Sharpe of 7.6 (no known fund sustains this); at 2% vol, 3.8
+(world-class). Per trade: 2 trades/day at 0.5% risk requires +0.40R
+expectancy after costs; good validated systematic strategies sustain
++0.05R–0.15R. **The dollar target is fundamentally a Sharpe claim, and the
+honest levers are capital and validated trade frequency — never leverage.**
+
+## New families searched (all logged `pass4 exploratory`; 46 experiments)
+
+Three genuinely different return sources were added, tested and controlled
+with the standard four-round battery. Same 200-day window as Passes 1–2 —
+no new data has arrived — so multiple-comparisons debt now spans ~8
+families and the acceptance bar rose accordingly (Bonferroni across ~25
+cells roughly triples the required trade count for significance).
+
+* **ETH/BTC spread (market-neutral, two-leg costs): EDGE REJECTED** at
+  Round 1 — PF 0.13–0.40, ~−$10k, killed. Relative value cannot pay double
+  execution costs at this frequency.
+* **Volatility-squeeze breakout: EDGE REJECTED** at Round 2 — BTC OOS
+  +$0.8k (Sharpe 0.38 = noise), ETH −$4.0k, SOL −$5.7k, unstable params.
+* **Funding-rate carry: the strongest candidate this program has produced**
+  (details below) — BTC survives everything except sample size; ETH and SOL
+  versions FAILED walk-forward (recorded; 1-of-3 markets is a selection-risk
+  flag, not a footnote).
+
+## funding_carry HL:BTC 1h — the surviving candidate
+
+Signal: rank trailing 24h funding within its 30-day history; short beyond
+the 90th percentile (fade crowded longs), long below the 10th, flat near
+median. ~0.25 trades/day, so costs are almost irrelevant (robust to 2× fees
++ 3× slippage: still +$9.1k full-period).
+
+| test | result |
+|---|---|
+| Walk-forward OOS (taker) | +$5.6k, PF 1.73, Sharpe 1.70, maxDD 3.8%, 30 trades |
+| Walk-forward OOS (maker cons/base) | +$6.1k / +$6.1k, PF 1.82, Sharpe ~1.8 |
+| Chosen params per window | **(0.9, 24) in all 5 windows, all 3 exec models** — the only perfectly stable parameters ever observed here |
+| Long / short (full period) | +$6.3k / +$5.3k — first candidate profitable on BOTH sides |
+| Regime thirds | +$5.4k (flat), **+$7.6k (BTC −13% bear)**, −$0.8k (+25% melt-up) — inverse regime profile to everything else tested |
+| Beta control, mixed | **98% (taker), 96% (maker) — SEPARATES** |
+| Beta control, per side | long 92%, short 92–94% — below the 95% bar |
+| Bootstrap MC (30 OOS trades) | median +$4.6k, p5 −$5.9k, **P(≤0)=29%** |
+| Funding actually collected | ~$0.5k of ~$11.6k — the P&L is positioning-fade, not carry income |
+
+**Verdict: INSUFFICIENT EVIDENCE** — 30 OOS trades, one market of three,
+per-side controls short of the bar, one 200-day window. Frozen as
+`funding_carry_btc_1h_p4` (hash-pinned, source-pinned) with pre-registered
+evaluation on **2026-11-30** (min 20 OOS trades; positive under both maker
+scenarios; mixed control ≥95% AND each side ≥90%).
+
+## $400/day sizing scenarios (walk-forward OOS streams, per-scenario limits)
+
+Limits scale with risk (daily loss = 3× per-trade risk); every scenario
+re-ran the full walk-forward — no linear extrapolation.
+
+| candidate | scenario | OOS mean $/day | median $/day | worst day | maxDD | P(loss 60d) | P(avg≥$400/d, 1y) | capital for $400/d |
+|---|---|---|---|---|---|---|---|---|
+| funding_carry BTC (taker) | cons 0.25% | 34 | 0 | −752 | 2.0% | 23% | ~0% | $1.17M |
+| funding_carry BTC (taker) | base 0.50% | **53** | 0 | −1,501 | 3.8% | 27% | ~0% | **$749k** |
+| funding_carry BTC (taker) | aggr 1.00% | **19** | 0 | −2,532 | 5.4% | **44%** | ~0% | $2.07M |
+| ORB ETH 15m (maker, beta-suspect) | cons 0.25% | 221 | −263 | −580 | 3.2% | 17% | 6.7% | $181k |
+| ORB ETH 15m (maker, beta-suspect) | base 0.50% | 183 | −263 | −1,155 | 3.7% | 25% | 4.8% | $218k |
+| ORB ETH 15m (maker, beta-suspect) | aggr 1.00% | 207 | −290 | −1,613 | 3.9% | 22% | 7.1% | $194k |
+
+Two structural findings: **(1) sizing up degrades the defensible candidate**
+(aggressive OOS net fell to $2.0k from $5.6k — larger positions interact
+with the daily-loss halts; the backtest "supporting" more size
+mathematically did not survive actually running it); **(2) the ORB stream's
+median day is NEGATIVE** — its average is a few large wins, exactly the
+$400-on-lucky-days shape the target explicitly excludes.
+
+## Portfolio
+
+fc-BTC × orb-ETH baseline OOS daily correlation on the 20 overlapping days:
+**−0.44** — the first genuinely promising diversification signal in the
+program (opposite regime profiles). But 20 days is too short: the formal
+verdict on current data is CONCENTRATE (combined Sharpe 1.65 vs 1.61, not
+meaningful). Re-test when both frozen streams have months of OOS history.
+
+## Final ranking (every candidate, exactly one verdict)
+
+| # | strategy / market / tf | OOS exp/trade | PF | Sharpe | maxDD | beta ctrl | verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | funding_carry HL:BTC 1h (all exec) | +$187 | 1.73–1.82 | 1.7–1.8 | 3.8% | mixed 96–98% ✓, sides 92–94% ✗ | **INSUFFICIENT EVIDENCE** (frozen, eval 2026-11-30) |
+| 2 | ORB HL:ETH 15m maker | +$122 | 1.46 | 1.9 | 3.7% | mixed 96–98% ✓, long-only 93% ✗ | **INSUFFICIENT EVIDENCE** (frozen, eval 2026-10-01) |
+| 3 | vol_breakout (BTC/ETH/SOL 1h) | +$27 BTC / neg | ≤1.09 | ≤0.38 | — | not reached | **EDGE REJECTED** |
+| 4 | funding_carry HL:ETH / HL:SOL 1h | −$110 / −$135 | 0.71 / 0.63 | neg | — | not reached | **EDGE REJECTED** |
+| 5 | ETH/BTC spread (MR + momentum) | ≈−$95 | 0.13–0.40 | neg | killed | not reached | **EDGE REJECTED** |
+| 6 | simple_momentum (all markets/tf) | scenario-unstable | ~0.9 | ~0 | — | n/a | **EDGE REJECTED** (Pass 2) |
+| 7 | zscore_mean_reversion, rolling_vwap, regime_gated_momentum, ORB non-ETH | negative | <1 | neg | — | n/a | **EDGE REJECTED** (Passes 1–2) |
+
+## The Most Important Question, answered from the evidence
+
+**"If I gave this system $100,000 today: the most defensible expected NET
+daily profit is $0**, because no candidate has cleared every pre-registered
+control. The best *unconfirmed* estimate is **+$53/day** (funding-carry
+baseline OOS mean) with a ~27% probability of being down over any 60-day
+stretch and a median day of $0. **Realistic maximum drawdown: the 10%
+kill-switch bound** (measured OOS drawdown 3.8%; bootstrap p95 ≈ $7k on
+30 trades). **Distance from a statistically credible $400/day system: two
+multiplicative gaps.** Evidence gap: the candidate needs its pre-registered
+Nov-30 OOS evaluation passed (~20+ fresh trades, controls ≥ bars) — roughly
+3+ months of untouched data, unavoidable at 0.25 trades/day. Economics gap:
+even then, $400/day needs ≈**$749k of capital** at this quality, or ~4–8
+validated, genuinely uncorrelated streams of similar quality on $100–200k —
+of which today there exist zero validated and two candidates with one
+promising −0.44 correlation reading. $400/day on $100k alone would require
+~0.4%/day = Sharpe ≳ 4–7 at observed volatilities, which nothing in 242
+logged experiments comes close to supporting."**
+
+No live trading is authorized.
+
+---
+
 # Pass 3 — Evidence Accumulation Infrastructure (2026-08-27)
 
 **No new performance claims are made in this pass, by design.** Pass 3 built
